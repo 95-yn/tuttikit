@@ -1,0 +1,124 @@
+# ───── Dependencies ─────
+node_modules/
+.pnpm-store/
+
+# ───── Build output ─────
+dist/
+build/
+.next/
+.turbo/
+out/
+
+# ───── TypeScript ─────
+*.tsbuildinfo
+*.d.ts.map
+
+# ───── Env / secrets（任何含密钥的都不进库） ─────
+.env
+.env.*
+.env.local
+.env.*.local
+# 范例文件保留（根目录 + 嵌套目录）
+!.env.example
+!**/.env.example
+
+# 私钥 / 证书
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+id_rsa
+id_ed25519
+id_*.pub
+
+# API key / token 类（习惯文件名通配）
+*secret*
+*SECRET*
+*token*.txt
+*TOKEN*.txt
+*api-key*
+*apikey*
+secrets/
+.secrets/
+.credentials
+credentials.json
+.netrc
+
+# ───── 个人草稿 / 文案 / 笔记（不进库） ─────
+# 写公众号 / 小红书 / 掘金的草稿、个人想法、TODO 等不应进 git
+drafts/
+.drafts/
+notes/
+.notes/
+draft-*.md
+草稿*
+草稿/
+xiaohongshu*
+小红书*
+公众号*
+juejin*
+掘金*
+wechat-*
+微信*
+*-draft.md
+*.draft.md
+SCRATCH.md
+scratch.md
+TODO-personal.md
+.private/
+private/
+
+# ───── Logs ─────
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ───── Runtime / persisted data ─────
+# data/ 是后端会话/trace/上传文件的运行时目录，不进版本控制
+apps/*/data/
+data/sessions/
+data/traces/
+data/uploads/
+data/long_term_memory.json
+
+# ───── Editor / OS ─────
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+Thumbs.db
+
+# ───── Test / coverage ─────
+coverage/
+.nyc_output/
+
+# ───── Python（skills 里可能有 Python 脚本） ─────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# ───── Tesseract OCR 语言模型（首次 OCR 时下载到 cwd） ─────
+*.traineddata
+*.traineddata.gz
+
+# ───── Misc ─────
+.cache/
+tmp/
+*.tgz
+.eslintcache
+
+# ───── MCP / Skills 个人配置 ─────
+# 项目级 .mcp.json 可能含远端 server token，按需放行
+# 想保留范例：.mcp.json.example（已存在）
+.mcp.json
+.mcp.local.json

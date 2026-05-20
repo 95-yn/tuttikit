@@ -1,0 +1,20 @@
+{
+  "name": "tuttikit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "可切换模型的多 Agent 协作框架（Tool Use / Memory / Streaming / Observability）— monorepo",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "pnpm --filter @tuttikit/server run dev",
+    "dev:web": "pnpm --filter @tuttikit/web run dev",
+    "build": "pnpm -r run build",
+    "start": "pnpm -r --parallel --stream run start",
+    "chat": "pnpm --filter @tuttikit/server run chat",
+    "test": "pnpm --filter @tuttikit/server run test"
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@10.24.0"
+}
