@@ -101,6 +101,19 @@ export class SessionManager {
     }
   }
 
+  /** 截断会话：删除 index >= fromIndex 的所有消息。用于"重生"/编辑后重发的场景。 */
+  async truncateMessages(id: string, fromIndex: number): Promise<Session | null> {
+    const session = await this.get(id);
+    if (!session) return null;
+    if (fromIndex < 0 || fromIndex > session.messages.length) {
+      throw new Error(`fromIndex 越界: ${fromIndex} / 共 ${session.messages.length} 条`);
+    }
+    session.messages = session.messages.slice(0, fromIndex);
+    session.updatedAt = new Date().toISOString();
+    await this._save(session);
+    return session;
+  }
+
   private async _save(session: Session): Promise<void> {
     await fs.writeFile(this._file(session.id), JSON.stringify(session, null, 2));
   }

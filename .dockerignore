@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+data
+**/data
+.git
+.github
+.DS_Store
+.env
+.env.local
+.private
+小红书*
+公众号*
+草稿*
+drafts
+*.log
+apps/web/.next
+apps/server/data/eval-runs

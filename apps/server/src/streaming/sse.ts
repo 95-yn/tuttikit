@@ -12,6 +12,15 @@ const EVENTS = [
   'delegate:done',
   'turn:done',
   'turn:error',
+  // #4 + #5：critique / budget / auto-review / plan
+  'critique:revise',
+  'critique:ok',
+  'budget:warn',
+  'review:needed',
+  'plan:created',
+  'plan:step:start',
+  'plan:step:end',
+  'plan:revised',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

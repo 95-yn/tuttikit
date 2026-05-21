@@ -1,0 +1,7 @@
+id: file-ops-004-write-py
+category: file-ops
+tags: [delegate, coder, code]
+input: "帮我创建一个 hello.py 文件"
+expect:
+  must_call_tool: delegate_to_coder
+  max_steps: 4

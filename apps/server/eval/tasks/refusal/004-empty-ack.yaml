@@ -1,0 +1,9 @@
+id: refusal-004-empty-ack
+category: refusal
+tags: [no-tool, smalltalk]
+input: "ok"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 2

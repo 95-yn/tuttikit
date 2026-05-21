@@ -1,4 +1,5 @@
 import type { ToolSpec, ToolCtx, LLMToolDef } from '../types.js';
+import { ToolInputError } from './errors.js';
 
 export class ToolRegistry {
   tools: Map<string, ToolSpec>;
@@ -33,6 +34,16 @@ export class ToolRegistry {
   async invoke(name: string, input: unknown, ctx: ToolCtx = {}): Promise<unknown> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`未知工具：${name}`);
-    return tool.handler(input ?? {}, ctx);
+    let parsedInput: unknown = input ?? {};
+    // 有 inputSchema → 运行时 zod 校验。失败抛 ToolInputError，由上层
+    // （Conductor / SubAgent）转 tool_result 给 LLM 自修复。
+    if (tool.inputSchema) {
+      const result = tool.inputSchema.safeParse(parsedInput);
+      if (!result.success) {
+        throw new ToolInputError(name, result.error, parsedInput);
+      }
+      parsedInput = result.data;
+    }
+    return tool.handler(parsedInput as never, ctx);
   }
 }

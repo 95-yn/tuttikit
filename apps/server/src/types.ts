@@ -17,6 +17,8 @@ export interface Attachment {
   extractedText?: string;
   extractedChars?: number;
   extractError?: string | null;
+  extractedTruncated?: boolean;          // 提取文本被 MAX_EXTRACTED_CHARS 截断
+  extractedOriginalChars?: number;       // 截断前的原始字符数
   pages?: number;
   ocrConfidence?: number;
 }
@@ -24,6 +26,10 @@ export interface Attachment {
 export interface Usage {
   inputTokens?: number;
   outputTokens?: number;
+  /** Anthropic prompt cache：命中已缓存的 input token 数（按 10% 计费） */
+  cacheReadInputTokens?: number;
+  /** Anthropic prompt cache：写入缓存的 input token 数（按 125% 计费） */
+  cacheCreationInputTokens?: number;
 }
 
 export interface Message {
@@ -62,7 +68,13 @@ export interface SessionSummary {
 export interface ToolSpec<TIn = any, TOut = any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
   name: string;
   description: string;
-  parameters: object;                 // JSON Schema
+  parameters: object;                 // JSON Schema（给 LLM 看）
+  /**
+   * 运行时 zod 校验。LLM 返回的 args 不可信，传错类型时这里会拦下；
+   * 配合 Conductor 自修复机制（见 agents/conductor.ts）把错误塞回 tool_result 让 LLM 自己改。
+   * 未提供时跳过校验（保留旧工具兼容）。
+   */
+  inputSchema?: import('zod').ZodType<TIn>;
   allowedAgents: string[];            // 哪些 agent role 能用
   handler: (input: TIn, ctx: ToolCtx) => Promise<TOut> | TOut;
 }
@@ -74,6 +86,12 @@ export interface ToolCtx {
   tracer?: import('./observability/tracer.js').Tracer;
   parentSpanId?: string;
   bus?: import('./core/messageBus.js').MessageBus;
+  /**
+   * 用户 stop / 服务 drain 时会触发 abort。
+   * 工具应在长操作（fetch / 子进程 / 大文件读）开始前检查 signal.aborted；
+   * 调用支持 AbortSignal 的 API（fetch / child_process）时直接把 signal 传过去。
+   */
+  signal?: AbortSignal;
   [k: string]: unknown;
 }
 
@@ -113,6 +131,12 @@ export interface MemoryEntry {
   source: string;
   text: string;
   createdAt: number;
+  id?: string;
+  tags?: string[];
+  /** 内存 / 持久化的 embedding（归一化后）。新写入的条目会带；老条目按需 lazy backfill */
+  vec?: number[];
+  /** 生成该 vec 用的 embedding provider 标识，避免不同模型混用 */
+  vecModel?: string;
   [k: string]: unknown;
 }
 

@@ -1,0 +1,9 @@
+id: boundary-004-emoji
+category: boundary
+tags: [no-tool, smalltalk]
+input: "👋"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 2

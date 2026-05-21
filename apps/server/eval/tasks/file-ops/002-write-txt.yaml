@@ -1,0 +1,7 @@
+id: file-ops-002-write-txt
+category: file-ops
+tags: [delegate, coder]
+input: "把上面的总结写到一个 .txt 文件里"
+expect:
+  must_call_tool: delegate_to_coder
+  max_steps: 4

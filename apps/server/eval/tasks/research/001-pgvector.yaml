@@ -1,0 +1,8 @@
+id: research-001-pgvector
+category: research
+tags: [delegate, researcher, multi-tool]
+input: "调研一下 pgvector，给我一段概念介绍"
+expect:
+  must_call_tool:
+    - delegate_to_researcher
+  max_steps: 4

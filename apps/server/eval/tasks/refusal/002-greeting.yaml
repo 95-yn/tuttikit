@@ -1,0 +1,9 @@
+id: refusal-002-greeting
+category: refusal
+tags: [no-tool, smalltalk]
+input: "介绍下你自己"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 4

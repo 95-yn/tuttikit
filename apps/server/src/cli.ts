@@ -12,6 +12,8 @@ import { buildToolRegistryWithSubAgents } from './tools/index.js';
 import { longTermMemory } from './memory/longTerm.js';
 import { tracer } from './observability/tracer.js';
 import { createLLM } from './llm/index.js';
+import { mcpManager } from './mcp/index.js';
+import { skillsLoader } from './skills/index.js';
 
 const args = process.argv.slice(2);
 
@@ -24,6 +26,12 @@ function takeOpt(name: string): string | null {
 const provider = takeOpt('--provider');
 const sessionFlag = takeOpt('--session');
 const oneshot = args.join(' ').trim();
+
+// 启动期：扫 skills + 连 MCP（让 CLI 跟 web 一样吃到这两个来源）
+skillsLoader.init();
+await mcpManager.init().catch((err) => {
+  console.warn(`[mcp] init 抛错，忽略：${(err as Error).message}`);
+});
 
 const bus = new MessageBus();
 const llm = createLLM(provider ?? undefined);

@@ -1,4 +1,10 @@
+import { z } from 'zod';
 import type { ToolSpec } from '../types.js';
+
+const Input = z.object({
+  query: z.string().min(1, 'query 不能为空'),
+  topK: z.number().int().positive().max(20).optional(),
+});
 
 interface KBEntry {
   title: string;
@@ -32,7 +38,7 @@ const KB: KBEntry[] = [
 ];
 
 export const webSearchTool: ToolSpec<
-  { query: string; topK?: number },
+  z.infer<typeof Input>,
   { query: string; results: KBEntry[]; note?: string }
 > = {
   name: 'web_search',
@@ -45,6 +51,7 @@ export const webSearchTool: ToolSpec<
     },
     required: ['query'],
   },
+  inputSchema: Input,
   allowedAgents: [],
   async handler({ query, topK = 3 }) {
     const q = String(query).toLowerCase();

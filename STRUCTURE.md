@@ -369,4 +369,151 @@ pnpm -r --parallel --stream start
 
 ---
 
+## 📦 路线图 v0.2 新增模块（按主题）
+
+> 本节随路线图 #1–#7 + 后续迭代陆续加入，与上面"按 X 找文件"互补。完整设计见 [`docs/agent-roadmap/`](./docs/agent-roadmap/)。
+
+### 评测（Eval Harness）
+
+```
+apps/server/eval/
+├── runner.ts              主入口；并发跑 task / 写 report.json / latest-<provider>.json
+├── loader.ts              扫 yaml + zod schema 校验
+├── score.ts               5 类客观断言 + LLM-judge async 路径
+├── judge.ts               LLM-as-judge（裁判 prompt + JSON 解析容错）
+├── types.ts               EvalTask / TaskRun / RunReport
+├── cli.mjs                bootstrap：先设 LOG_LEVEL 再 import runner
+├── README.md              使用指南
+└── tasks/                 35+ yaml 任务，9 个分类：
+    ├── math/  research/  file-ops/  refusal/  multi-step/
+    └── boundary/  cancel/  safety-injection/  followup/
+```
+
+外部脚本 / 文档：
+- `pnpm -C apps/server eval [--filter=...] [--provider=...] [--judge-provider=...] [--fail-on-regression]`
+- 真 LLM 工作流：[`docs/agent-roadmap/eval-real-llm-workflow.md`](./docs/agent-roadmap/eval-real-llm-workflow.md)
+
+### 结构化 I/O + 韧性
+
+```
+apps/server/src/
+├── tools/registry.ts          Zod inputSchema 运行时校验
+├── tools/errors.ts            ToolInputError（自修复 payload）/ ToolHandlerError
+├── llm/retry.ts               withRetry：429/5xx/网络错指数退避 + jitter
+└── llm/fallback.ts            FallbackLLM：provider 链，仅 outage 类才降级
+```
+
+### 安全
+
+```
+apps/server/src/
+├── tools/fileSystem.ts        path.relative 越界 + allowlist + denylist
+├── tools/calculator.ts        长度 + 数字字面量 cap + Number.isFinite 校验
+├── mcp/manager.ts             trusted / allowTools 信任边界 + 命名空间冲突检测
+├── core/uploads.ts            MAX_EXTRACTED_CHARS 截断
+├── llm/aisdk.ts               <user-attachment> 包裹附件文本（injection 隔离）
+└── server.ts                  helmet 头 + sseLimiter（单 IP 8 连接）
+
+scripts/pre-commit.sh          git commit hook：拦小红书/草稿/.env/sk-* 等
+```
+
+### 成本 / 预算
+
+```
+apps/server/src/
+├── core/budget.ts             BudgetGuard：beforeTurn/afterTurn + 80% 阈值警告
+├── llm/pricing.ts             pricing 表 + priceFor()（含 cache 单价）
+├── llm/cache.ts               LLMCache（开发用，LLM_CACHE=true 启用）
+└── llm/aisdk.ts:_withPromptCache   Anthropic prompt cache（≥1024 token 才上）
+```
+
+### 部署 / 健康检查
+
+```
+apps/server/
+├── Dockerfile                 多阶段，pnpm filter；HEALTHCHECK 内置
+├── src/server.ts:/ready       env + data + MCP 多维度就绪检查
+├── src/core/drain.ts          Drainer：in-flight turn 计数 + 30s 超时 graceful shutdown
+├── src/config.ts:validateEnvOnBoot   Zod 校验，缺 API key 在 boot 期挂
+
+docker-compose.yml             stop_grace_period 35s
+.mcp.json.example              trusted / allowTools 示例
+```
+
+### Planning & Reflection
+
+```
+apps/server/src/
+├── agents/planner.ts          planTask / revisePlan / shouldPlan 启发式 / renderPlanForConductor
+├── agents/conductor.ts        _runReactSteps + _planExecuteSteps（V2 显式步骤） + re-plan 一次
+└── prompts/selfCritique.ts    OK / REVISE: 输出格式
+```
+
+### RAG / 长期记忆升级
+
+```
+apps/server/src/
+├── llm/embedding.ts           OpenAI / Mock embedding + cosineSim
+├── memory/longTerm.ts         dedup（exact + 向量）+ evict + ensureEmbeddings + compact
+├── memory/hybridSearch.ts     RRF 合并多 ranker
+└── memory/vectorStore.ts      VectorStore 接口 + InMemoryVectorStore
+
+docs/agent-roadmap/sqlite-vec-migration.md   SqliteVecStore 实现示例 + 迁移脚本
+```
+
+### Skills / MCP 翻译 + 管理页
+
+```
+apps/server/src/
+├── skills/loader.ts           扫盘（含软链 + plugins/marketplaces）+ reload()
+├── skills/translator.ts       单 skill 翻译 + 列表显示名批量翻译 + 落盘
+├── mcp/translator.ts          tool desc + 显示名翻译 + 落盘
+└── mcp/manager.ts:reconnect   单 server 重连不重启
+
+apps/web/src/app/
+├── skills/page.tsx            管理页：虚拟滚动 + 中英切换 + 列表名翻译
+└── mcp/page.tsx               管理页：状态表 + reconnect + tool 翻译
+
+apps/server/data/
+├── skills-zh/<name>.zh.md     单 skill 翻译落盘
+├── skills-zh/_names.zh.json   列表显示名 batch
+└── mcp-zh/<server>.zh.json    MCP 翻译
+```
+
+### 前端性能
+
+```
+apps/web/src/components/
+├── VirtualList.tsx            零依赖虚拟滚动（80 行）
+├── SlashMenu.tsx              `/` 触发面板（skills + mcp）
+└── ChatNotices.tsx            浮层通知（budget / review / critique / plan 4 类）
+
+apps/web/src/hooks/useChat.ts  rAF batching token + 5 类新事件监听 + budget USD
+```
+
+### Trace Replay
+
+```
+apps/server/src/server.ts:/traces/:id/replay   单 / 多 provider 并发 replay
+apps/web/src/app/traces/page.tsx               TraceTree + ReplayControls + ABComparePanel
+```
+
+### 路线图文档
+
+```
+docs/agent-roadmap/
+├── README.md                          全景 gap 分析 + 优先级矩阵
+├── 01-eval-harness.md                 设计 + 落地路径
+├── 02-rag-and-memory.md
+├── 03-structured-io-and-resilience.md
+├── 04-planning-and-reflection.md
+├── 05-cost-and-budget.md
+├── 06-safety-guardrails.md
+├── 07-deployment-and-debug.md
+├── eval-real-llm-workflow.md          真 LLM eval 操作手册 + CI 配置
+└── sqlite-vec-migration.md            VectorStore 升级路径
+```
+
+---
+
 **有更多「想做 X」没在表里？** 在 `STRUCTURE.md` 里加一行 PR，方便下个人少踩一次坑。

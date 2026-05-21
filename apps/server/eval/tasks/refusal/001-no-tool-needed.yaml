@@ -1,0 +1,11 @@
+id: refusal-001-no-tool-needed
+category: refusal
+tags: [no-tool, smalltalk]
+input: "你好"
+expect:
+  must_not_call_tool:
+    - calculator
+    - delegate_to_researcher
+    - delegate_to_coder
+    - file_system_write
+  max_steps: 2

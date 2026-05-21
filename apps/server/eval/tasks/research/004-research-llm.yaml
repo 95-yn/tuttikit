@@ -1,0 +1,7 @@
+id: research-004-research-llm
+category: research
+tags: [delegate, researcher]
+input: "对比 RAG 和 Fine-tuning 的优缺点"
+expect:
+  must_call_tool: delegate_to_researcher
+  max_steps: 4

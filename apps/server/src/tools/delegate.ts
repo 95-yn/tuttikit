@@ -1,5 +1,11 @@
+import { z } from 'zod';
 import type { ToolSpec, ToolCtx } from '../types.js';
 import type { Trace, Tracer } from '../observability/tracer.js';
+
+const DelegateInputSchema = z.object({
+  goal: z.string().min(1, 'goal 不能为空'),
+  context: z.string().optional(),
+});
 
 /**
  * Agent as Tool —— 把一个子 Agent 包装成 Conductor 可调用的工具。
@@ -58,6 +64,7 @@ export function makeDelegateTool({
       },
       required: ['goal'],
     },
+    inputSchema: DelegateInputSchema,
     allowedAgents: [],
     handler: async ({ goal, context }, ctx: ToolCtx = {}) => {
       const input = context ? `${goal}\n\n参考背景：\n${context}` : goal;

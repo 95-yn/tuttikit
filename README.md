@@ -49,9 +49,30 @@ pnpm test
 | 端口 | 服务 |
 | --- | --- |
 | 3000 | Next.js (apps/web) —— 前端 UI |
-| 3001 | Express (apps/server) —— REST + SSE，提供 `/sessions`、`/traces`、`/memory`、`/uploads`、`/events`、`/health` |
+| 3001 | Express (apps/server) —— REST + SSE |
 
 后端默认开启 CORS 放行 `http://localhost:3000`，可在 `.env` 用 `CORS_ORIGINS` 覆盖（逗号分隔）。
+
+## Web 管理页
+
+| 路由 | 功能 |
+| --- | --- |
+| `/` | 对话主界面（含 `/` slash 命令面板） |
+| `/skills` | Skills 列表 + 详情；按需翻译成中文 + 落盘；虚拟滚动 |
+| `/mcp` | MCP server 列表 + tool 列表 + 重连；翻译同上 |
+| `/traces` | Trace 列表 + 详情树 + Replay（单 / A/B 多 provider） |
+
+进入路径：右上角 🧩 / 🔌 / 📊 三个图标。
+
+## CLI
+
+```bash
+pnpm -C apps/server chat                    # 交互
+pnpm -C apps/server chat -- "算 1+2"        # 一次性
+pnpm -C apps/server chat -- --session=<id>  # 续会话
+```
+
+CLI 与 web 共享 sessions、skills、MCP（启动期 init 同套 loader）。
 
 ## 系统能力
 
@@ -77,16 +98,59 @@ pnpm test
 
 ## 主要特性
 
-- ✅ **多 Agent 委派**：Conductor + Researcher / Coder / Reviewer，sub-agent as tool
-- ✅ **流式输出**：token 逐字浮现，可中断
-- ✅ **多模型可切**：anthropic / openai / deepseek / mock，一行 `.env` 切换
-- ✅ **多模态附件**：图片 + PDF 上传，PDF 文本抽取（pdf-parse）+ 图片 OCR（tesseract.js）
-- ✅ **多设备同步**：PC 发消息 → 手机自动看到（SSE 全局广播）
-- ✅ **手机扫码即进**：页面右下角 QR，扫描即访问
-- ✅ **响应式**：≤720px 自动汉堡 + 抽屉，触屏左滑关闭
-- ✅ **持久化**：会话 / Trace / 长期记忆全落本地 JSON，重启不丢
-- ✅ **可观测**：自建 Trace/Span，每次 turn 完整记录在 `data/traces/`
-- ✅ **零配置可跑**：无 API Key 时自动 fallback 到 MockProvider，整条流水线照常演示
+**Agent 编排**
+- 多 Agent 委派：Conductor + Researcher / Coder / Reviewer，sub-agent as tool
+- Plan-and-Execute：复杂任务先规划再分步执行（V2 显式逐步 + 失败 re-plan）
+- Self-Critique：终答前内省审校，REVISE 触发再跑一轮（默认关）
+- Skills：兼容 Claude Code 的 `.claude/skills/` + `~/.claude/plugins/marketplaces/`，扫到 50+ 个开箱即用
+- MCP：标准协议接外部工具（stdio + HTTP），`trusted` / `allowTools` 信任边界
+
+**对话体验**
+- 流式输出 + rAF 批处理（避免 setState 风暴）
+- **`/` 直接调 skill/MCP**：输入框打 `/` 弹面板，键盘选完自动 inject prompt
+- 多模态：图片 + PDF + OCR（tesseract.js）
+- 多设备同步（SSE 全局广播） + 扫码即进
+- 响应式 + 暗色 / 亮色 / 跟随系统主题
+- 管理页：`/skills` `/mcp` `/traces` 三页全部虚拟滚动，上千条目无压力
+
+**多模型 / 韧性 / 成本**
+- 4 个 provider（anthropic / openai / deepseek / mock）一行 `.env` 切
+- Provider fallback chain：主限流自动切备
+- Retry + backoff（429 / 5xx 指数退避）
+- AbortController 全链路（关页面 / Stop 立即中断 tool）
+- Budget guard：会话 / 当日 USD 上限 + 80% 预警
+- Anthropic prompt cache（输入价 -90%）+ LLM 响应缓存（开发用）
+
+**记忆 / 检索**
+- RAG（轻量）：long-term memory 自带 embedding + 关键词 / 向量 RRF 混合检索
+- Memory compact：超阈值聚类 → LLM 合并摘要；exact + 向量 dedup；LRU evict
+- VectorStore 接口预留（sqlite-vec 迁移文档已就绪）
+
+**i18n（中文）**
+- Skills 详情按需翻译，落盘 `data/skills-zh/<name>.zh.md` 可直接打开
+- Skills 列表名批量翻译，落 `data/skills-zh/_names.zh.json`
+- MCP tool descriptions + 中文显示名，落 `data/mcp-zh/<server>.zh.json`
+
+**安全**
+- Helmet 头 + SSE 单 IP 限 8 连接
+- fileSystem 写入 allowlist（`data/ tmp/ output/`）+ denylist（`.env / .git / package.json`）
+- Prompt injection：`<user-attachment>` 隔离 + system 加防护
+- pre-commit hook 拦小红书 / 草稿 / API key 提交
+
+**可观测 / 评测**
+- 自建 Trace/Span 嵌套树，`/traces` UI
+- Trace Replay：单 + A/B 多 provider 并发对比
+- Eval Harness：35+ golden tasks + LLM-as-judge + regression diff（`--fail-on-regression` CI 门禁）
+
+**部署**
+- Dockerfile + docker-compose（多阶段 + pnpm filter）
+- `/ready` 健康检查（env / 数据目录 / MCP 连接）
+- Graceful drain（SIGTERM 等 in-flight turn 完成，30s 超时）
+- Zod env 校验，缺 key 在 boot 期挂
+
+**始终保留**
+- 持久化：会话 / Trace / 记忆全落本地 JSON
+- 零配置可跑：无 API Key → MockProvider 演示
 
 ## 接入真实模型
 
@@ -122,32 +186,67 @@ DEEPSEEK_MODEL=deepseek-chat
 
 ## 关键 API（后端）
 
+**对话 / 会话**
+
 | Method | Path | 用途 |
 | --- | --- | --- |
-| GET | `/health` | 当前 provider |
-| POST | `/sessions` | 新建会话 |
-| GET | `/sessions` | 会话列表 |
-| GET | `/sessions/:id` | 会话详情 |
-| PATCH | `/sessions/:id` | 重命名 |
-| DELETE | `/sessions/:id` | 删除 |
+| GET | `/health` / `/ready` | 活探针 / 就绪探针（含 env / data / MCP 多重检查） |
+| GET / POST / PATCH / DELETE | `/sessions(/:id)` | 会话 CRUD |
 | GET | `/sessions/:id/stream?message=&attachmentIds=&provider=` | SSE 流式对话 |
-| POST | `/uploads` | 单文件上传（multipart） |
-| GET | `/uploads/:id` | 文件回源 |
+| GET | `/sessions/:id/budget` | 会话累计 token / USD |
+| POST / GET | `/uploads` | 单文件上传 + 回源 |
 | GET | `/events` | 全局广播 SSE（多设备同步） |
+
+**Trace + Replay**
+
+| Method | Path | 用途 |
+| --- | --- | --- |
 | GET | `/traces` / `/traces/:id` | trace 列表 / 详情 |
-| GET | `/memory` / `/memory/search?q=` | 长期记忆 |
+| POST | `/traces/:id/replay` | body `{provider}` 单 replay，`{providers:[]}` A/B 并发 |
+
+**Skills / MCP（含翻译）**
+
+| Method | Path | 用途 |
+| --- | --- | --- |
+| GET | `/skills` / `/skills/:name` | list / 详情含 body |
+| POST | `/skills/reload` | 重扫盘热更新 |
+| GET / POST | `/skills/:name/translation` / `/skills/:name/translate` | 单 skill 中文翻译（落盘） |
+| GET / POST | `/skills/translated-names` / `/skills/translate-names` | 列表显示名批量翻译 |
+| GET | `/mcp` / `/mcp/:name` | server 列表 / 详情含 tools |
+| POST | `/mcp/:name/reconnect` | 重连单 server |
+| GET / POST | `/mcp/:name/translation` / `/mcp/:name/translate` | server 翻译（tool desc + 显示名） |
+
+**记忆**
+
+| Method | Path | 用途 |
+| --- | --- | --- |
+| GET | `/memory` / `/memory/search?q=` | 长期记忆 list / 搜索（关键词 + 向量 RRF） |
 
 前端走 `/api/*` 由 Next.js rewrites 代理。
 
 ## 测试
 
 ```bash
-pnpm test
-# 三套：
-#   - AI SDK 集成（消息映射、tool-call、流式）21 断言
-#   - Conductor + 多轮 + delegate                12 断言
-#   - Markdown / 代码块 / Mermaid                34 断言
+pnpm -C apps/server test    # 10 套测试，~200 断言
+# aisdk · conductor · markdown · skills · mcp · resilience · safety · budget · rag · planner
+
+pnpm -C apps/server eval    # 35+ golden tasks 端到端（mock provider）
+pnpm -C apps/server eval --provider=anthropic --judge-provider=anthropic --fail-on-regression
 ```
+
+详细见 [`apps/server/eval/README.md`](./apps/server/eval/README.md) +
+[`docs/agent-roadmap/eval-real-llm-workflow.md`](./docs/agent-roadmap/eval-real-llm-workflow.md)。
+
+## 安全（pre-commit）
+
+防止误提交 `小红书*` / `公众号*` / `草稿*` / `.private/` / `.env` / API key 等：
+
+```bash
+ln -sf ../../scripts/pre-commit.sh .git/hooks/pre-commit
+```
+
+之后 `git commit` 会先跑 `scripts/pre-commit.sh`：检测到敏感文件名 / API key 字面量 → 阻止 commit。
+紧急绕过：`git commit --no-verify`。
 
 ---
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Icon, type IconName } from './IconSprite';
 import { compactJsonOneLine, prettyJson } from '@/lib/markdown';
 
@@ -18,7 +18,14 @@ export interface ToolEntry {
   output?: unknown;
 }
 
-export function ToolBlock({ entry }: { entry: ToolEntry }) {
+export const ToolBlock = memo(ToolBlockImpl, (prev, next) =>
+  prev.entry === next.entry
+  || (prev.entry.toolCallId === next.entry.toolCallId
+      && prev.entry.status === next.entry.status
+      && prev.entry.output === next.entry.output)
+);
+
+function ToolBlockImpl({ entry }: { entry: ToolEntry }) {
   const [open, setOpen] = useState(false);
   const isDelegate = entry.name.startsWith('delegate_to_');
   const iconId: IconName = isDelegate ? 'i-bot' : (ICON_FOR_TOOL[entry.name] || 'i-wrench');

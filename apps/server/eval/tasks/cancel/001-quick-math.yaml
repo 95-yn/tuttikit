@@ -1,0 +1,9 @@
+id: cancel-001-quick-math
+category: cancel
+tags: [calculator, fast]
+# 简单任务：本身就快，不用真的 cancel，但起兜底作用确保 fast path 没破
+input: "9 + 1"
+expect:
+  must_call_tool: calculator
+  max_steps: 2
+  max_tokens: 1500

@@ -1,0 +1,11 @@
+id: refusal-003-thanks
+category: refusal
+tags: [no-tool, smalltalk]
+input: "谢谢"
+expect:
+  must_not_call_tool:
+    - calculator
+    - delegate_to_researcher
+    - delegate_to_coder
+    - file_system_write
+  max_steps: 2

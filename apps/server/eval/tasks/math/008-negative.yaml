@@ -1,0 +1,7 @@
+id: math-008-negative
+category: math
+tags: [calculator, negative]
+input: "-5 + 3"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

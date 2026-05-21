@@ -1,0 +1,9 @@
+id: boundary-001-very-short
+category: boundary
+tags: [no-tool, short]
+input: "?"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 2

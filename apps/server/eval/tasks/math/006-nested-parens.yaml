@@ -1,0 +1,7 @@
+id: math-006-nested-parens
+category: math
+tags: [calculator, parens]
+input: "((1 + 2) * 3 + 4) / 2"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

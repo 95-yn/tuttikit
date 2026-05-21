@@ -11,6 +11,19 @@ import type { McpServerConfig, McpConfig, McpServerStatus } from './types.js';
 const TOOL_PREFIX = 'mcp__';                  // mcp__<server>__<tool>
 const CALL_TIMEOUT_MS = 30_000;
 
+/** 系统内置工具名 —— MCP server 上同名工具仍可注册（因为有 mcp__ 前缀隔离），但 warn 提示一下 */
+const BUILTIN_TOOL_NAMES = new Set([
+  'calculator', 'web_search',
+  'file_system_read', 'file_system_write',
+  'delegate_to_researcher', 'delegate_to_coder', 'delegate_to_reviewer',
+  'find_skills', 'invoke_skill',
+]);
+
+/** server 名做命名空间用，必须合法 */
+function isLegalServerName(s: string): boolean {
+  return /^[a-zA-Z][\w-]{0,63}$/.test(s);
+}
+
 interface ClientHandle {
   name: string;
   client: Client;
@@ -53,6 +66,31 @@ export class MCPManager {
     logger.info({ connected: this.clients.length, statuses: this.statuses }, '[mcp] 初始化完成');
   }
 
+  /**
+   * 单 server 重连（运维用）：先关旧 client，重新读 .mcp.json 配置后再 connect。
+   *   - 找不到 → { ok: false, error }
+   *   - 重连失败 → 状态被标 failed，但函数返 { ok: false, error }
+   */
+  async reconnect(name: string): Promise<{ ok: boolean; toolCount?: number; error?: string }> {
+    const cfg = this.loadConfig();
+    if (!cfg) return { ok: false, error: '.mcp.json 不存在' };
+    const serverCfg = cfg.mcpServers?.[name];
+    if (!serverCfg) return { ok: false, error: `配置中没有 server "${name}"` };
+
+    // 关旧 client
+    const existing = this.clients.find((h) => h.name === name);
+    if (existing) {
+      try { await existing.client.close(); } catch {/* ignore */}
+      this.clients = this.clients.filter((h) => h.name !== name);
+    }
+    this.statuses = this.statuses.filter((s) => s.name !== name);
+
+    await this.connectServer(name, serverCfg);
+    const fresh = this.statuses.find((s) => s.name === name);
+    if (fresh?.state === 'connected') return { ok: true, toolCount: fresh.toolCount };
+    return { ok: false, error: fresh?.error || '连接失败' };
+  }
+
   /** 拿到所有已连接 server 的工具 specs，给 buildToolRegistryWithSubAgents 用 */
   getToolSpecs(): ToolSpec[] {
     return this.clients.flatMap((h) => h.specs);
@@ -88,6 +126,24 @@ export class MCPManager {
       logger.warn({ name }, '[mcp] 配置缺 command/url，跳过');
       return;
     }
+    if (!isLegalServerName(name)) {
+      this.statuses.push({ name, transport, state: 'failed', toolCount: 0, error: 'server 名非法' });
+      logger.warn({ name }, '[mcp] server 名只允许字母开头、字母/数字/下划线/连字符，跳过');
+      return;
+    }
+    // untrusted 必须显式声明 allowTools，否则拒绝注册
+    const trusted = cfg.trusted === true;
+    const allowToolsSet: Set<string> | null = trusted
+      ? null
+      : new Set(cfg.allowTools ?? []);
+    if (!trusted && allowToolsSet!.size === 0) {
+      this.statuses.push({
+        name, transport, state: 'failed', toolCount: 0,
+        error: 'untrusted MCP server 必须提供 allowTools 白名单；设置 trusted=true 跳过白名单',
+      });
+      logger.warn({ name }, '[mcp] untrusted 但无 allowTools，跳过');
+      return;
+    }
 
     try {
       const client = new Client({ name: 'tuttikit', version: '0.1.0' });
@@ -110,18 +166,37 @@ export class MCPManager {
       const specs: ToolSpec[] = [];
 
       for (const t of tools.tools ?? []) {
+        // untrusted server：白名单之外的 tool 一律不注册
+        if (allowToolsSet && !allowToolsSet.has(t.name)) {
+          logger.warn({ server: name, tool: t.name }, '[mcp] untrusted server 试图注册非白名单 tool，跳过');
+          continue;
+        }
+        if (BUILTIN_TOOL_NAMES.has(t.name)) {
+          // mcp__ 前缀做了命名空间隔离，但还是 warn 一下，便于排查
+          logger.warn({ server: name, tool: t.name },
+            '[mcp] MCP server 暴露了与内置工具同名的 tool，已加 mcp__ 前缀隔离');
+        }
         const fullName = `${TOOL_PREFIX}${name}__${t.name}`;
         specs.push({
           name: fullName,
           description: t.description || `(MCP) ${t.name}`,
           parameters: (t.inputSchema ?? { type: 'object', properties: {} }) as object,
           allowedAgents: ['conductor'],
-          handler: async (input: unknown) => {
-            return Promise.race([
+          handler: async (input: unknown, ctx) => {
+            // 调用前先看 signal；进 race 后用 signal abort 立刻拒绝
+            if (ctx?.signal?.aborted) throw new Error(`MCP 工具 ${fullName} 已被取消`);
+            const racers: Array<Promise<unknown>> = [
               client.callTool({ name: t.name, arguments: (input ?? {}) as Record<string, unknown> }),
               new Promise((_, reject) =>
                 setTimeout(() => reject(new Error(`MCP 工具 ${fullName} 调用超时 (${CALL_TIMEOUT_MS}ms)`)), CALL_TIMEOUT_MS)),
-            ]);
+            ];
+            if (ctx?.signal) {
+              racers.push(new Promise((_, reject) => {
+                const s = ctx.signal!;
+                s.addEventListener('abort', () => reject(new Error(`MCP 工具 ${fullName} 已被取消`)), { once: true });
+              }));
+            }
+            return Promise.race(racers);
           },
         });
       }

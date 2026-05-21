@@ -1,0 +1,7 @@
+id: followup-001-second-question
+category: followup
+tags: [calculator, followup]
+input: "那 8 * 7 呢"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

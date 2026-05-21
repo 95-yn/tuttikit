@@ -9,6 +9,56 @@ const ROOT = path.resolve(process.cwd(), 'data/uploads');
 export const ALLOWED_IMAGE = /^image\/(png|jpe?g|webp|gif|heic|heif)$/i;
 export const ALLOWED_PDF = /^application\/pdf$/i;
 export const MAX_BYTES = 25 * 1024 * 1024;
+/**
+ * 单个附件提取出来塞进 prompt 的最大字符数。
+ * 防御 200 页 PDF 把 context window 占满 / 长 injection 嵌入；
+ * 真要全文档问答应该走 RAG 检索而不是塞 prompt。
+ */
+export const MAX_EXTRACTED_CHARS = 60_000;
+
+// ───── 内存缓存（LRU），避免一次对话里反复读盘 ─────
+//   meta JSON 缓存上限：500 条
+//   binary buffer 缓存上限：64MB（避免吃内存）
+const META_CACHE_MAX = 500;
+const BUF_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+
+const metaCache = new Map<string, UploadMetaWithPath>();
+const bufCache = new Map<string, Buffer>();
+let bufCacheSize = 0;
+
+function lruGet<T>(map: Map<string, T>, key: string): T | undefined {
+  const v = map.get(key);
+  if (v !== undefined) {
+    // 命中后重新插入到 Map 末尾（LRU）
+    map.delete(key);
+    map.set(key, v);
+  }
+  return v;
+}
+function lruSetMeta(key: string, v: UploadMetaWithPath): void {
+  if (metaCache.has(key)) metaCache.delete(key);
+  metaCache.set(key, v);
+  while (metaCache.size > META_CACHE_MAX) {
+    const oldest = metaCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    metaCache.delete(oldest);
+  }
+}
+function lruSetBuf(key: string, buf: Buffer): void {
+  if (bufCache.has(key)) {
+    bufCacheSize -= bufCache.get(key)!.byteLength;
+    bufCache.delete(key);
+  }
+  bufCache.set(key, buf);
+  bufCacheSize += buf.byteLength;
+  while (bufCacheSize > BUF_CACHE_MAX_BYTES) {
+    const oldest = bufCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    const dropped = bufCache.get(oldest)!;
+    bufCache.delete(oldest);
+    bufCacheSize -= dropped.byteLength;
+  }
+}
 
 export type AttachmentKind = 'image' | 'pdf';
 
@@ -56,6 +106,9 @@ export async function saveUpload({ buffer, mimetype, originalname, size }: SaveI
   await fs.writeFile(fullPath, buffer);
 
   const extracted = await extractByKind(kind, buffer);
+  const rawText = extracted.text || '';
+  const truncated = rawText.length > MAX_EXTRACTED_CHARS;
+  const finalText = truncated ? rawText.slice(0, MAX_EXTRACTED_CHARS) : rawText;
 
   const entry: UploadMeta = {
     id,
@@ -65,9 +118,10 @@ export async function saveUpload({ buffer, mimetype, originalname, size }: SaveI
     sizeBytes: size,
     storedAs: filename,
     createdAt: new Date().toISOString(),
-    extractedText: extracted.text || '',
-    extractedChars: (extracted.text || '').length,
+    extractedText: finalText,
+    extractedChars: finalText.length,
     extractError: extracted.error || null,
+    ...(truncated ? { extractedTruncated: true as const, extractedOriginalChars: rawText.length } : {}),
     ...(extracted.pages !== undefined ? { pages: extracted.pages } : {}),
     ...(extracted.confidence !== undefined ? { ocrConfidence: extracted.confidence } : {}),
   };
@@ -81,10 +135,14 @@ export interface UploadMetaWithPath extends UploadMeta {
 
 export async function getUpload(id: string): Promise<UploadMetaWithPath | null> {
   if (!/^[a-f0-9]{24}$/i.test(id)) return null;
+  const cached = lruGet(metaCache, id);
+  if (cached) return cached;
   const metaPath = path.join(ROOT, `${id}.json`);
   try {
     const meta = JSON.parse(await fs.readFile(metaPath, 'utf-8')) as UploadMeta;
-    return { ...meta, fullPath: path.join(ROOT, meta.storedAs) };
+    const withPath: UploadMetaWithPath = { ...meta, fullPath: path.join(ROOT, meta.storedAs) };
+    lruSetMeta(id, withPath);
+    return withPath;
   } catch {
     return null;
   }
@@ -97,5 +155,9 @@ export interface UploadMetaWithBuffer extends UploadMetaWithPath {
 export async function readUploadBuffer(id: string): Promise<UploadMetaWithBuffer | null> {
   const meta = await getUpload(id);
   if (!meta) return null;
-  return { ...meta, buffer: await fs.readFile(meta.fullPath) };
+  const cachedBuf = lruGet(bufCache, id);
+  if (cachedBuf) return { ...meta, buffer: cachedBuf };
+  const buf = await fs.readFile(meta.fullPath);
+  lruSetBuf(id, buf);
+  return { ...meta, buffer: buf };
 }

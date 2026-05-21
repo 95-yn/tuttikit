@@ -1,0 +1,15 @@
+id: research-003-judge-self-intro
+category: research
+tags: [judge, openendend]
+input: "用 3 句话介绍 TuttiKit 项目"
+expect:
+  # 客观断言：不允许调 calculator / file_system_write
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 3
+  # 主观断言（开放性回答）：mock provider 下 judge 会被跳过（视为 pass）；
+  # 真 provider（LLM_JUDGE_PROVIDER=anthropic 等）下 ≥3 分才通过
+  judge_prompt: |
+    回答应当：1) 提到这是多 Agent / 对话框架；2) 不超过 3 句；3) 不胡编功能
+  judge_min_score: 3

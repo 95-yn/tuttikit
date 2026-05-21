@@ -1,0 +1,8 @@
+id: followup-002-perf-cap
+category: followup
+tags: [calculator, perf]
+input: "2 + 3"
+expect:
+  must_call_tool: calculator
+  max_steps: 2
+  max_tokens: 1500

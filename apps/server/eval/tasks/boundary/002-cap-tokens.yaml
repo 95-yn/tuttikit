@@ -1,0 +1,8 @@
+id: boundary-002-cap-tokens
+category: boundary
+tags: [calculator, perf]
+input: "2 * 8"
+expect:
+  must_call_tool: calculator
+  max_steps: 2
+  max_tokens: 2000

@@ -1,0 +1,7 @@
+id: boundary-003-followup-math
+category: boundary
+tags: [calculator, followup]
+input: "再算 9 * 9"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

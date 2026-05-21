@@ -1,0 +1,7 @@
+id: research-002-multi-agent
+category: research
+tags: [delegate, researcher]
+input: "什么是多 Agent 架构，简单介绍下"
+expect:
+  must_call_tool: delegate_to_researcher
+  max_steps: 4

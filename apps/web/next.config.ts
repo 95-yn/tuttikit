@@ -16,6 +16,11 @@ const nextConfig: NextConfig = {
       { source: '/api/events', destination: `${BACKEND}/events` },
       { source: '/api/uploads/:path*', destination: `${BACKEND}/uploads/:path*` },
       { source: '/api/uploads', destination: `${BACKEND}/uploads` },
+      // skills / mcp 管理页：admin 页面用
+      { source: '/api/skills/:path*', destination: `${BACKEND}/skills/:path*` },
+      { source: '/api/skills', destination: `${BACKEND}/skills` },
+      { source: '/api/mcp/:path*', destination: `${BACKEND}/mcp/:path*` },
+      { source: '/api/mcp', destination: `${BACKEND}/mcp` },
     ];
   },
   reactStrictMode: true,

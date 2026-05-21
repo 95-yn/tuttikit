@@ -13,9 +13,15 @@
     "test:aisdk": "tsx examples/test-aisdk-integration.ts",
     "test:conductor": "tsx examples/test-conductor.ts",
     "test:markdown": "tsx examples/test-markdown.ts",
-    "test": "npm run test:aisdk && npm run test:conductor && npm run test:markdown && npm run test:skills && npm run test:mcp",
+    "test": "npm run test:aisdk && npm run test:conductor && npm run test:markdown && npm run test:skills && npm run test:mcp && npm run test:resilience && npm run test:safety && npm run test:budget && npm run test:rag && npm run test:planner",
     "test:skills": "tsx examples/test-skills.ts",
-    "test:mcp": "tsx examples/test-mcp.ts"
+    "test:mcp": "tsx examples/test-mcp.ts",
+    "test:resilience": "tsx examples/test-resilience.ts",
+    "test:safety": "tsx examples/test-safety.ts",
+    "test:budget": "tsx examples/test-budget.ts",
+    "test:rag": "tsx examples/test-rag.ts",
+    "test:planner": "tsx examples/test-planner.ts",
+    "eval": "tsx eval/cli.mjs"
   },
   "engines": {
     "node": ">=18.17.0"
@@ -25,11 +31,13 @@
     "@ai-sdk/openai": "^3.0.64",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/js-yaml": "^4.0.9",
     "ai": "^6.0.185",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.1",
     "multer": "^2.1.1",
     "nanoid": "^5.0.7",
     "pdf-parse": "^2.4.5",

@@ -1,0 +1,7 @@
+id: math-002-with-parens
+category: math
+tags: [calculator, single-tool]
+input: "(1 + 2) * 3 等于多少？"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

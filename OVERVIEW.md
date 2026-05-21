@@ -12,11 +12,14 @@
 它干啥呢：
 
 - 你跟它唠嗑，**Conductor 主 Agent** 自己判断是直接答、调工具、还是把活分给 Researcher / Coder / Reviewer 几个小弟去干
-- 模型可以**随便换** —— Anthropic / OpenAI / DeepSeek / 离线 Mock，一行 `.env` 切
+- 复杂任务自动 **Plan-and-Execute**：先拆步骤再分步跑；某步失败自动 re-plan 换路子
+- 模型可以**随便换** —— Anthropic / OpenAI / DeepSeek / 离线 Mock，一行 `.env` 切；主限流自动 fallback 到备用
 - 给它扔**图片、PDF**，它解析了喂给 LLM，纯文本模型也能"看见"
 - 桌面上聊到一半，**手机扫个码接着聊**，数据实时同步
-- 把 Claude Code 风格的 **Skill 文件**扔进 `.claude/skills/`，模型就懂得啥时候调用了
-- **MCP 协议**支持，社区那一堆现成的 MCP server 直接接进来用
+- 把 Claude Code 风格的 **Skill 文件**扔进 `.claude/skills/`，模型就懂得啥时候调用了（含 `~/.claude/plugins/marketplaces/` 装的，50+ 个开箱即用）
+- **MCP 协议**支持，社区那一堆现成的 MCP server 直接接进来用（含信任边界 + tool 翻译）
+- 对话框打 `/` 弹面板，**直接强制调某个 skill / MCP tool**
+- 全套 **预算守卫** + **评测体系** + **可观测**：单会话上限、35+ 端到端任务、trace 嵌套树 + 多 provider A/B replay
 
 整明白了？说白了就是：**自己的 AI 助手，自己说了算**。
 
@@ -37,14 +40,18 @@
 
 ## 它会的能力清单（杠杠的）
 
-### 🤖 Agent 协作
+### 🤖 Agent 协作 + 规划
 - **Conductor 主 Agent**：持完整对话历史，每步由 LLM 决定调啥
 - **3 个 sub-agent**：Researcher（调研） / Coder（写文件） / Reviewer（审查）
 - **Agent as Tool 模式**：sub-agent 包装成 `delegate_to_*` 工具，主 agent 看到的世界就是"一堆工具"，编排逻辑零特殊处理
 - **ReAct 循环**：自动多步推理 → 调用工具 → 拿结果 → 再推理，直到给出最终答复
+- **Plan-and-Execute V1/V2**：复杂任务先调 Planner 拆 steps，注入 system（V1）或显式逐步执行（V2，含 `plan:step:start/end` 事件 + 失败 re-plan 一次）
+- **Self-Critique**：终答前用 LLM 内省审校，`REVISE:` 触发再跑一轮（默认关）
+- **Auto-Review on code write**：写代码文件时自动 emit `review:needed` 事件，UI 可提示用户审查
 - **Trace 完整记录**：每次 turn 的所有 LLM 调用 + 工具调用 + sub-agent 调用全程嵌套记录，落 `data/traces/<id>.json`
+- **Trace Replay**：换 provider 重跑同一对话；A/B 多 provider 并发对比
 
-### 🔌 LLM Provider
+### 🔌 LLM Provider + 韧性
 | Provider | 文本 | 图片 | PDF |
 | --- | :-: | :-: | :-: |
 | Anthropic (Claude 3.5+) | ✓ | 原生 ✓ | 原生 ✓ |
@@ -53,6 +60,15 @@
 | Mock（离线） | ✓ | OCR 文本 | 抽取文本 |
 - 通过 Vercel AI SDK 抽象，加新 provider 一个 `case` 的事
 - 无 API Key 自动 fallback 到 Mock，**先跑通再花钱**
+- **Provider fallback chain**：主限流（429）/ 服务 outage 时自动切到 `LLM_FALLBACK_CHAIN` 上的下一个
+- **Retry + backoff**：429 / 5xx 指数退避重试（默认 3 次）
+- **AbortController 全链路**：用户关页 / Stop / 服务 drain 时正在跑的 tool 调用立即中断
+
+### 💰 成本与预算
+- **BudgetGuard**：单会话 / 单日 USD 上限；80% 阈值预警 emit 到 UI；超限硬拦截 `turn:error`
+- **Pricing 表**：4 个 provider × 多 model 的 input/output/cacheRead 单价；前缀匹配自适应版本
+- **Anthropic prompt cache**：≥1024 token 的 system prompt 自动挂 `cacheControl`，输入价 -90%
+- **LLM 响应缓存**：开发 / eval 时启用（`LLM_CACHE=true`），相同请求秒返不烧 API
 
 ### 📎 多模态
 - 图片 / PDF 上传，**OCR 与 PDF 文本抽取在上传时同步完成**，元数据落盘
@@ -61,22 +77,45 @@
 
 ### 📚 Skills 系统
 - **完全兼容 Claude Code skills**：`.claude/skills/<name>/SKILL.md` 直接能用
-- frontmatter 解析（`name`、`description`）
+- **三处自动扫**：项目级 + `~/.claude/skills/`（软链跟随） + `~/.claude/plugins/marketplaces/`（用 `/plugin install` 装的）
+- 开箱即用 50+ 个 skill（superpowers + Claude Code 官方 marketplace）
+- frontmatter 解析（`name`、`description`）；优先级 plugin < user < project
 - 模型通过 `find_skills(query)` + `invoke_skill(name)` 按需加载
-- 项目级 + 用户全局两层，项目覆盖全局
+- **`/skills` Web 管理页**：列表 + 详情 + 按需翻译成中文（`data/skills-zh/<name>.zh.md`）
+- **批量翻译列表名**：50+ 个 skill 的显示名一次翻完（`data/skills-zh/_names.zh.json`）
+- **Reload 不重启**：磁盘改完 SKILL.md 点 `↻ Reload` 热更新
 
 ### 🔗 MCP 集成
 - 支持 **stdio + HTTP/SSE** 两种传输
 - `.mcp.json` 配置 → 启动期自动连接 → 工具自动进 Conductor 工具表
 - 远端工具命名 `mcp__<server>__<tool>`，跟 Claude Code 一个约定
 - 失败的 server 跳过、不阻断启动
+- **信任边界**：`trusted: false` 必须给 `allowTools` 白名单；防 untrusted server 注册任意 tool
+- **`/mcp` Web 管理页**：状态圆点 / tool 列表 / 单 server Reconnect 不重启 / tool 翻译
+- **AbortSignal 透传**：用户 stop → MCP `callTool` Promise.race 上 signal，立即拒绝
+
+### ⚡ `/` slash 命令
+- 输入框打 `/` 弹下拉面板，列出 50+ skill + 所有 MCP tool
+- 顶部 tab 切「全部 / Skills / MCP」
+- 实时过滤 + `↑↓ Enter Esc` 键盘全套
+- 选完自动 inject `请使用 skill \`<name>\` 完成：|` 模板，光标停在 `|`
+
+### 🔍 RAG / 长期记忆
+- **Embedding 抽象**：OpenAI `text-embedding-3-small` / Mock（hash 派生，离线测试）
+- **混合检索**：关键词 + 向量两个 ranker → RRF (Reciprocal Rank Fusion) 合并 top-k
+- **去重 + 压缩**：sha1 exact dedup → cosine ≥0.95 向量 dedup → 超量按 cluster 聚类 + LLM 合并摘要
+- **VectorStore 接口**：InMemoryVectorStore 内置，sqlite-vec 迁移文档预留（`docs/agent-roadmap/sqlite-vec-migration.md`）
 
 ### 🌐 Web 端
-- **暗色 OLED 风格**，Plus Jakarta Sans + 系统字体回退（国内不卡）
-- **流式输出**：token 逐字浮现，可中断
+- **三套主题**：dark / light / 跟随系统，localStorage 持久不闪
+- **流式输出**：token 逐字浮现 + rAF 批处理（避免长答 setState 风暴）+ 可中断
 - **Markdown 渲染**：代码高亮（highlight.js）+ Mermaid 流程图（懒载 + 20s 超时）
 - **工具调用折叠面板**：每次调用看得到 input/output 完整对照
 - **附件渲染**：图片缩略图 + PDF 卡片（含文件名/页数/抽取字数徽章）
+- **三个管理页**：`/skills` `/mcp` `/traces`，全部虚拟滚动（VirtualList 零依赖，固定行高 + overscan + RAF）
+- **顶部浮层通知**：budget 警告 / review 建议 / critique 修订 / plan 步骤进度 共 4 类
+- **CtxMeter**：上下文 + 累计 USD + 80% 黄 100% 红 状态颜色
+- **Cmd+K Command Palette**：fuzzy 搜会话 + 操作 + provider 切换
 
 ### 📱 移动端
 - **响应式**：≤720px 自动汉堡 + 抽屉式侧栏
@@ -95,16 +134,39 @@
 ### 💾 持久化
 - **会话**：`data/sessions/<id>.json`，重启不丢
 - **Trace**：`data/traces/<id>.json`，每次 turn 完整快照
-- **长期记忆**：`data/long_term_memory.json`，关键词 + 时间衰减打分
-- **上传**：`data/uploads/<id>.<ext>` + 元数据 JSON
-- 全部本地文件，**没有 Postgres，没有 Redis，没有 S3**，零运维
+- **长期记忆**：`data/long_term_memory.json`，含 embedding（混合检索）+ dedup + LRU
+- **上传**：`data/uploads/<id>.<ext>` + 元数据 JSON + LRU buffer 缓存
+- **Eval 报表**：`data/eval-runs/<run>.json` + `latest-<provider>.json`（regression diff baseline）
+- **Skills/MCP 翻译**：`data/skills-zh/`、`data/mcp-zh/`
+- 全部本地文件，**没有 Postgres，没有 Redis，没有 S3**，零运维（10k 条目内）
+
+### 🔒 安全
+- **Helmet 头**：CSP / HSTS / X-Frame-Options 等默认子集
+- **SSE 限流**：单 IP 最多 8 路 SSE 长连接
+- **fileSystem 写入 allowlist + denylist**：默认只准 `data/ tmp/ output/`，`.env / .git / package.json` 严禁
+- **Prompt injection 防御**：附件抽取文本 `<user-attachment>` 标签隔离 + system 加防护语
+- **MCP 信任边界**：`trusted: false` 强制 `allowTools` 白名单
+- **Pre-commit hook**：拦小红书 / 草稿 / `.env` / `sk-*` 等敏感文件提交（`scripts/pre-commit.sh`）
+
+### 📊 可观测 + 评测
+- **Trace/Span**：自建嵌套 trace，`/traces` UI 可视化
+- **Trace Replay**：单 + A/B 多 provider 并发对比
+- **Eval Harness**：35+ golden tasks（9 个分类）+ LLM-as-judge + regression diff
+- **`--fail-on-regression`** CI 门禁；`latest-<provider>.json` 当 baseline
+
+### 🚢 部署
+- **Dockerfile 多阶段** + `docker-compose.yml`（pnpm filter / volume / HEALTHCHECK）
+- **`/ready` 健康检查**：env / 数据目录可写 / MCP 连接状态
+- **Graceful drain**：SIGTERM 时等 in-flight turn 完成（30s 超时）
+- **Zod env 校验**：缺 API key 在 boot 期挂，不等到第一个请求
 
 ### 🛠️ 工程
 - **Monorepo**：pnpm workspaces，apps/server + apps/web
 - **TypeScript 全栈**：strict 模式，noEmit，tsx 直跑（无编译步骤）
-- **84 个测试断言**：AI SDK 集成 21 + Conductor 12 + Markdown 34 + Skills 9 + MCP 8
+- **10 套测试 ~200 断言**：aisdk + conductor + markdown + skills + mcp + resilience + safety + budget + rag + planner
+- **35+ 端到端 eval 任务**：9 个分类，含 safety-injection / multi-step / cancel 等
 - **一键启动脚本**：`pnpm dev` 自动检测 + 清理端口冲突 + 打印 LAN URL
-- **生产构建 125KB**：First Load JS，移动端秒开
+- **生产构建 ~110 KB** First Load JS，移动端秒开
 
 ---
 
@@ -186,31 +248,46 @@ mkdir -p .claude/skills/my-skill
 
 ---
 
-## 已经在路上 / 想加但还没加的
+## 已经做完的（v0.2）
 
-可预期会逐步落地的（按收益从大到小）：
+按路线图 7 大方向 + 后续延伸，**全部落地**：
+
+| 方向 | 主要产出 |
+| --- | --- |
+| **#1 Eval Harness** | 35+ golden tasks + LLM-as-judge + regression diff + `--fail-on-regression` CI 门禁 |
+| **#2 RAG** | Embedding 抽象 + 混合检索 RRF + dedup + cluster summarization + VectorStore 接口 |
+| **#3 Resilience** | Zod 入参 + 自修复 payload + withRetry + Provider fallback chain + AbortController 全链路 |
+| **#4 Planning** | Plan-and-Execute V1（system 注入）+ V2（显式 step + 失败 re-plan）+ Self-Critique + Auto-Review |
+| **#5 Cost & Budget** | BudgetGuard + Pricing 表 + Anthropic prompt cache + LLM 响应缓存 |
+| **#6 Safety** | Helmet / SSE 限流 / write allowlist / 附件 injection 隔离 / MCP 信任 / pre-commit hook |
+| **#7 Deployment** | Dockerfile + env 校验 + `/ready` + graceful drain + Trace Replay（单 + A/B 多 provider） |
+| **延伸** | Skills/MCP 翻译 + 管理页 + `/` slash 命令 + VirtualList + 中英切换 + 落盘可查 |
+
+详见 [`docs/agent-roadmap/`](./docs/agent-roadmap/) 7 篇方案 + `eval-real-llm-workflow.md` + `sqlite-vec-migration.md`。
+
+## 还没做（明显的下一步）
 
 | 想加的 | 价值 | 难度 |
 | --- | --- | --- |
-| **RAG / 向量记忆** | 把 longTerm.search() 的关键词换成 embedding + cosine，长期记忆质量飞跃 | 中 |
-| **更多 LLM provider**（智谱/通义/Gemini） | aisdk.ts 加 case；用户选择多 | 低 |
-| **真实 web 搜索** | 替换 webSearch.ts 的 handler 接 Tavily / Serper | 低 |
-| **Trace 可视化** | 现在 trace 落 JSON，加个 `/traces/:id` 树状图 UI 看嵌套调用 | 中 |
-| **多用户鉴权** | session 加 userId 维度，集成 magic link 或 OAuth | 高 |
-| **Docker 一键部署** | Dockerfile + docker-compose，云上 5 分钟 | 低 |
-| **Skill marketplace** | 把社区 skill 做成可订阅的索引，pnpm install 装 skill 包 | 中 |
+| **真 LLM eval baseline** | 跑一次真 provider 建立首个 baseline，后续改动 diff 才有意义 | 低（要 API key + 钱） |
+| **sqlite-vec 持久化** | > 10k 条目时该上 | 中（编译依赖） |
+| **更多 LLM provider**（智谱/通义/Gemini） | aisdk.ts 加 case | 低 |
+| **真 web 搜索**（Tavily/Serper） | 替换 webSearch.ts | 低 |
+| **多用户鉴权** | 团队 / 公司场景 | 高 |
+| **plan:revised UI 时间轴** | 当前只用徽标，可以更细致 | 中 |
 
-如果你想接其中某个，[`STRUCTURE.md`](./STRUCTURE.md) 都有对应「改哪些文件」的查找表。
+每条都有「改哪些文件」的查找表，见 [`STRUCTURE.md`](./STRUCTURE.md) 的 v0.2 新增模块清单。
 
 ---
 
 ## 几个数字
 
-- 后端 TypeScript：**33 个 .ts 文件 ≈ 3000 行**（含全部 agent / 工具 / LLM / 上传 / MCP / skills）
-- 前端 TypeScript：**13 个组件 + 4 个 hook + lib ≈ 1800 行 .ts/.tsx**
-- 全栈样式：**1 个 globals.css ≈ 1400 行**（OLED 暗色 + 响应式）
-- 测试断言：**84 个**，全过
-- 文档：README + STRUCTURE + ARCHITECTURE + spec + 这份 OVERVIEW，**5 份文档把项目讲明白**
+- 后端 TypeScript：**60+ 个 .ts 文件 ≈ 7000 行**（含 agent + 工具 + LLM + 上传 + MCP + skills + eval + planner + budget + RAG）
+- 前端 TypeScript：**20+ 个组件 + 6 个 hook + 3 个管理页 ≈ 3500 行 .ts/.tsx**
+- 全栈样式：**1 个 globals.css ≈ 2200 行**（dark + light + system + 响应式）
+- 单元测试：**10 套 ~200 断言**，全过
+- 端到端 eval：**35+ tasks**，9 个分类，全过（mock）
+- 文档：README + STRUCTURE + OVERVIEW + SHOWCASE + ARCHITECTURE + 11 篇 agent-roadmap，**讲透项目**
 
 ---
 

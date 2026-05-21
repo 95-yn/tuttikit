@@ -1,0 +1,7 @@
+id: math-009-zero-result
+category: math
+tags: [calculator]
+input: "100 - 100"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

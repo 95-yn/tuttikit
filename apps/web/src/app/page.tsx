@@ -6,10 +6,15 @@ import { Composer } from '@/components/Composer';
 import { EmptyState } from '@/components/EmptyState';
 import { MessageBubble } from '@/components/MessageBubble';
 import { ToastModalHost, showConfirm, showToast } from '@/components/ToastModalHost';
+import { ChatNotices } from '@/components/ChatNotices';
 import { QrFab } from '@/components/QrFab';
+import { CommandPalette } from '@/components/CommandPalette';
+import { DebugPanel } from '@/components/DebugPanel';
 import { useChat } from '@/hooks/useChat';
 import { useGlobalSync } from '@/hooks/useGlobalSync';
 import { useAttachments } from '@/hooks/useAttachments';
+import { useKeyboardAware } from '@/hooks/useKeyboardAware';
+import { exportSessionToMarkdown, downloadMarkdown, copyToClipboard } from '@/lib/exportSession';
 import * as api from '@/lib/api';
 import type { SessionSummary, Session } from '@/lib/types';
 
@@ -21,10 +26,14 @@ export default function ChatPage() {
   const [providerOverride, setProviderOverride] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [focusToken, setFocusToken] = useState(0);
+  const focusInput = useCallback(() => setFocusToken((t) => t + 1), []);
+  const [cmdkOpen, setCmdkOpen] = useState(false);
 
   const chat = useChat(currentId);
   const attach = useAttachments();
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  useKeyboardAware();
 
   // ───── Boot ─────
   useEffect(() => {
@@ -46,12 +55,15 @@ export default function ChatPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Cmd/Ctrl+N 新建会话
+  // 全局快捷键：Cmd+N 新建 / Cmd+K 命令面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
         newSession();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdkOpen((v) => !v);
       }
     };
     document.addEventListener('keydown', onKey);
@@ -59,13 +71,30 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 自动滚到底
+  // 滚动行为：贴底就 follow，用户上滚就尊重他
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
   useEffect(() => {
     const el = messagesRef.current;
     if (!el) return;
-    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-    if (near || chat.bubbles.at(-1)?.streaming) el.scrollTop = el.scrollHeight;
-  }, [chat.bubbles]);
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setPinnedToBottom(distance < 80);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [currentId]);
+  // 每次有新 token / 新消息时：贴底才滚（不再强行打扰用户）
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    if (pinnedToBottom) el.scrollTop = el.scrollHeight;
+  }, [chat.bubbles, pinnedToBottom]);
+  const scrollToBottom = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
 
   // ───── Actions ─────
   const refreshSessions = useCallback(async () => {
@@ -87,7 +116,8 @@ export default function ChatPage() {
     const s = await api.createSession();
     await refreshSessions();
     await loadSession(s.id);
-  }, [refreshSessions, loadSession]);
+    focusInput();   // 新建会话直接定位到输入框，省一次点击
+  }, [refreshSessions, loadSession, focusInput]);
 
   const onDelete = useCallback(async (s: SessionSummary) => {
     const ok = await showConfirm({
@@ -122,6 +152,52 @@ export default function ChatPage() {
     setCurrentSession(s);
     chat.loadFromSession(s);
   }, [currentId, chat]);
+
+  // 导出当前会话为 markdown 文件
+  const exportCurrent = useCallback(async () => {
+    if (!currentId) { showToast('先选一个会话', { type: 'warn' }); return; }
+    const s = await api.getSession(currentId);
+    const md = exportSessionToMarkdown(s);
+    const safeTitle = (s.title || 'session').replace(/[\\/:*?"<>|]/g, '_');
+    downloadMarkdown(md, `${safeTitle}.md`);
+    showToast('已下载 .md 文件', { type: 'success', duration: 2400 });
+  }, [currentId]);
+
+  // 复制当前会话全文到剪贴板
+  const copyCurrent = useCallback(async () => {
+    if (!currentId) { showToast('先选一个会话', { type: 'warn' }); return; }
+    const s = await api.getSession(currentId);
+    const md = exportSessionToMarkdown(s);
+    const ok = await copyToClipboard(md);
+    showToast(ok ? '会话已复制到剪贴板' : '复制失败', { type: ok ? 'success' : 'error', duration: 2400 });
+  }, [currentId]);
+
+  // 重生：找到最后一条 user 消息 → 截断（含 user）→ 重发同样内容
+  const regenerate = useCallback(async () => {
+    if (!currentId || chat.busy) return;
+    try {
+      const s = await api.getSession(currentId);
+      let lastUserIdx = -1;
+      for (let i = s.messages.length - 1; i >= 0; i--) {
+        if (s.messages[i].role === 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx < 0) {
+        showToast('找不到要重生的用户消息', { type: 'warn' });
+        return;
+      }
+      const userMsg = s.messages[lastUserIdx];
+      const text = userMsg.content || '';
+      const attachments = userMsg.attachments || [];
+      await api.truncateMessages(currentId, lastUserIdx);
+      const fresh = await api.getSession(currentId);
+      setCurrentSession(fresh);
+      chat.loadFromSession(fresh);
+      await chat.send(text, { provider: providerOverride || undefined, attachments });
+      refreshSessions();
+    } catch (err) {
+      showToast(`重生失败：${(err as Error).message}`, { type: 'error', duration: 4000 });
+    }
+  }, [currentId, chat, providerOverride, refreshSessions]);
 
   useGlobalSync(
     {
@@ -185,15 +261,48 @@ export default function ChatPage() {
             onProviderChange={setProviderOverride}
             ctxUsage={chat.ctxUsage}
             onMenu={() => setDrawerOpen(true)}
+            onNew={newSession}
           />
 
           <div id="messages" className="messages" ref={messagesRef}>
             {chat.bubbles.length === 0 ? (
-              <EmptyState onPick={(t) => setInput(t)} />
+              <EmptyState onPick={(t) => { setInput(t); focusInput(); }} />
             ) : (
-              chat.bubbles.map((b) => <MessageBubble key={b.id} data={b} />)
+              (() => {
+                // 标记最后一条非流式 assistant 为「最新」—— 只它显示重生按钮
+                let latestAssistantId: string | null = null;
+                for (let i = chat.bubbles.length - 1; i >= 0; i--) {
+                  const b = chat.bubbles[i];
+                  if (b.role === 'assistant' && !b.streaming) {
+                    latestAssistantId = b.id; break;
+                  }
+                }
+                return chat.bubbles.map((b) => (
+                  <MessageBubble
+                    key={b.id}
+                    data={{ ...b, isLatestAssistant: b.id === latestAssistantId }}
+                    onRegenerate={b.id === latestAssistantId ? regenerate : undefined}
+                  />
+                ));
+              })()
             )}
           </div>
+          {/* 用户上滚时浮一个「回到底部」按钮，PC + 移动通用 */}
+          {!pinnedToBottom && chat.bubbles.length > 0 && (
+            <button
+              type="button"
+              className="scroll-to-bottom"
+              onClick={scrollToBottom}
+              aria-label="回到底部"
+              title="回到底部"
+            >
+              <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+            </button>
+          )}
 
           <Composer
             value={input}
@@ -205,12 +314,28 @@ export default function ChatPage() {
             uploading={attach.uploading}
             onAddFiles={attach.addFiles}
             onRemoveAttachment={attach.remove}
+            focusToken={focusToken}
           />
         </main>
       </div>
 
       <QrFab />
+      <CommandPalette
+        open={cmdkOpen}
+        onClose={() => setCmdkOpen(false)}
+        sessions={sessions}
+        currentId={currentId}
+        onSelectSession={loadSession}
+        onNewSession={newSession}
+        onDeleteSession={onDelete}
+        onSetProvider={setProviderOverride}
+        effectiveProvider={effectiveProvider}
+        onExportCurrent={currentId ? exportCurrent : undefined}
+        onCopyCurrent={currentId ? copyCurrent : undefined}
+      />
+      <DebugPanel />
       <ToastModalHost />
+      <ChatNotices notices={chat.notices} onDismiss={chat.dismissNotice} />
     </>
   );
 }

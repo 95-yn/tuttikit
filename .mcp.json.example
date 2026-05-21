@@ -2,13 +2,16 @@
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "trusted": true
     },
     "remote-example": {
       "url": "https://your-mcp-server.example.com/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN"
-      }
+      },
+      "allowTools": ["get_weather", "search_docs"],
+      "notes": "untrusted server：只允许在 allowTools 白名单里的工具被注册"
     }
   }
 }

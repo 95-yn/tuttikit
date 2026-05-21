@@ -15,6 +15,17 @@ export async function getSession(id: string): Promise<Session> {
   const r = await fetch(`${API}/sessions/${id}`);
   return r.json();
 }
+export interface SessionBudgetStats {
+  inputTokens: number;
+  outputTokens: number;
+  totalUSD: number;
+  turns: number;
+}
+export async function getSessionBudget(id: string): Promise<SessionBudgetStats> {
+  const r = await fetch(`${API}/sessions/${id}/budget`);
+  if (!r.ok) return { inputTokens: 0, outputTokens: 0, totalUSD: 0, turns: 0 };
+  return r.json();
+}
 export async function renameSession(id: string, title: string): Promise<Session> {
   const r = await fetch(`${API}/sessions/${id}`, {
     method: 'PATCH',
@@ -25,6 +36,16 @@ export async function renameSession(id: string, title: string): Promise<Session>
 }
 export async function deleteSession(id: string): Promise<{ ok: boolean }> {
   const r = await fetch(`${API}/sessions/${id}`, { method: 'DELETE' });
+  return r.json();
+}
+
+/** 截断会话消息：删除 index >= fromIndex 的所有消息，用于重生 / 编辑重发 */
+export async function truncateMessages(id: string, fromIndex: number): Promise<Session> {
+  const r = await fetch(`${API}/sessions/${id}/messages?fromIndex=${fromIndex}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `truncate failed: ${r.status}`);
+  }
   return r.json();
 }
 export async function getHealth(): Promise<{ ok: boolean; provider: string }> {

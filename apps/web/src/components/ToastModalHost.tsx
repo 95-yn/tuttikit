@@ -40,10 +40,16 @@ export function ToastModalHost() {
   useEffect(() => {
     subs.confirm = (opts) => new Promise<boolean>((resolve) => setModal({ ...opts, resolve }));
     subs.toast = (message, opts) => {
-      const id = Date.now() + Math.random();
       const type = opts?.type ?? 'info';
       const dur = opts?.duration ?? 3500;
-      setToasts((arr) => [...arr, { id, message, type }]);
+      const id = Date.now() + Math.random();
+      // 去重：1.5s 内同样的 message + type 直接吞掉，不刷屏
+      setToasts((arr) => {
+        const now = Date.now();
+        const isDuplicate = arr.some((t) => t.message === message && t.type === type && (now - t.id) < 1500);
+        if (isDuplicate) return arr;
+        return [...arr, { id, message, type }];
+      });
       if (dur > 0) setTimeout(() => removeToast(id), dur);
     };
     return () => { delete subs.confirm; delete subs.toast; };

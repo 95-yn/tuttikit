@@ -1,0 +1,7 @@
+id: math-005-decimal
+category: math
+tags: [calculator, decimal]
+input: "3.14 * 2.5"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

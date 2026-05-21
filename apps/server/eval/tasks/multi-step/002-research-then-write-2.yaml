@@ -1,0 +1,8 @@
+id: multi-step-002-research-then-write-2
+category: multi-step
+tags: [delegate, multi-step]
+input: "研究下 transformer 架构，然后生成一个 report.md"
+expect:
+  must_call_tool:
+    - delegate_to_researcher
+  max_steps: 5

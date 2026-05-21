@@ -1,0 +1,9 @@
+id: refusal-006-bye
+category: refusal
+tags: [no-tool]
+input: "再见"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 2

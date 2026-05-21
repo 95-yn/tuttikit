@@ -1,0 +1,8 @@
+id: file-ops-001-write-md
+category: file-ops
+tags: [delegate, coder, file_system_write]
+input: "帮我生成一个 report.md 文件，内容是关于 TuttiKit 的简介"
+expect:
+  must_call_tool:
+    - delegate_to_coder
+  max_steps: 4

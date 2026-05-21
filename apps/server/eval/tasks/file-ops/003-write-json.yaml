@@ -1,0 +1,7 @@
+id: file-ops-003-write-json
+category: file-ops
+tags: [delegate, coder]
+input: "把这个数据生成到 config.json 文件里"
+expect:
+  must_call_tool: delegate_to_coder
+  max_steps: 4

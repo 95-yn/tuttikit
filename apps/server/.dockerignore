@@ -1,0 +1,12 @@
+node_modules
+data
+.git
+.github
+*.log
+.DS_Store
+.env
+.env.local
+README.md
+ARCHITECTURE.md
+examples
+eval/data

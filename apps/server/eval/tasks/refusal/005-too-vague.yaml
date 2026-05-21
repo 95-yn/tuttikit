@@ -1,0 +1,10 @@
+id: refusal-005-too-vague
+category: refusal
+tags: [no-tool, smalltalk]
+input: "嗯"
+expect:
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+    - delegate_to_researcher
+  max_steps: 2

@@ -1,0 +1,8 @@
+id: math-007-many-ops
+category: math
+tags: [calculator]
+input: "100 - 25 + 10 * 2 - 4"
+expect:
+  must_call_tool: calculator
+  max_steps: 3
+  max_tokens: 5000

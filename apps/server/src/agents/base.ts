@@ -151,11 +151,15 @@ export class BaseAgent {
             this.bus?.emit('tool:error', {
               agent: this.name, tool: call.name, error: e.message, toolCallId: call.id,
             });
+            const inputErr = err as { name?: string; toLLMPayload?: () => unknown };
+            const payload = inputErr?.name === 'ToolInputError' && typeof inputErr.toLLMPayload === 'function'
+              ? inputErr.toLLMPayload()
+              : { error: e.message };
             this.memory.append({
               role: 'tool',
               toolCallId: call.id,
               toolName: call.name,
-              content: JSON.stringify({ error: e.message }),
+              content: JSON.stringify(payload),
             });
           }
         }

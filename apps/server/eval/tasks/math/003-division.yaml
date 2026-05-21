@@ -1,0 +1,7 @@
+id: math-003-division
+category: math
+tags: [calculator, single-tool]
+input: "100 / 4 - 5 是多少"
+expect:
+  must_call_tool: calculator
+  max_steps: 3

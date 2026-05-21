@@ -1,0 +1,7 @@
+id: research-005-principle
+category: research
+tags: [delegate, researcher, principle]
+input: "请介绍 attention 机制的原理"
+expect:
+  must_call_tool: delegate_to_researcher
+  max_steps: 4
