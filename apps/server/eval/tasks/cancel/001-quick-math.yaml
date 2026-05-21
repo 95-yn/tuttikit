@@ -1,9 +1,11 @@
 id: cancel-001-quick-math
 category: cancel
 tags: [calculator, fast]
-# 简单任务：本身就快，不用真的 cancel，但起兜底作用确保 fast path 没破
+# 简单任务：兜底 fast path 没破。
+# 注意：真模型（如 DeepSeek/Claude）经常心算 9+1=10 不调 calculator；
+# 本任务在真模型下预期失败，是已知的「设计假设 mock 行为」副作用。
 input: "9 + 1"
 expect:
   must_call_tool: calculator
   max_steps: 2
-  max_tokens: 1500
+  max_tokens: 8000

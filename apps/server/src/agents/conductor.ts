@@ -49,7 +49,7 @@ export class ConductorAgent {
   systemPrompt: string;
   logger: Logger;
 
-  constructor({ llm, toolRegistry, sessionManager, bus, maxSteps = 10 }: ConductorDeps) {
+  constructor({ llm, toolRegistry, sessionManager, bus, maxSteps = 20 }: ConductorDeps) {
     this.llm = llm;
     this.toolRegistry = toolRegistry;
     this.sessionManager = sessionManager;

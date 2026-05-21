@@ -1,7 +1,16 @@
 id: research-002-multi-agent
 category: research
-tags: [delegate, researcher]
+tags: [research, concept]
 input: "什么是多 Agent 架构，简单介绍下"
 expect:
-  must_call_tool: delegate_to_researcher
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 5
+  judge_prompt: |
+    回答应当：
+    1) 解释多 Agent 架构的核心思想（多个 agent 协作 / 分工）；
+    2) 提到至少一种模式（如 orchestrator-worker / planner-executor / group chat 等）或类比；
+    3) 简洁，不啰嗦。
+    扣分：完全不答 / 跑题
+  judge_min_score: 3

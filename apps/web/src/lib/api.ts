@@ -48,7 +48,14 @@ export async function truncateMessages(id: string, fromIndex: number): Promise<S
   }
   return r.json();
 }
-export async function getHealth(): Promise<{ ok: boolean; provider: string }> {
+export async function getHealth(): Promise<{
+  ok: boolean;
+  provider: string;
+  /** v0.2+：当前 provider 配置的 model */
+  model?: string;
+  /** v0.2+：服务端根据 provider × model 推出的上下文窗口（tokens） */
+  contextWindow?: number;
+}> {
   const r = await fetch(`${API}/health`);
   return r.json();
 }

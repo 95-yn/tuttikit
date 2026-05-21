@@ -21,6 +21,10 @@ interface Props {
   provider: string;                  // 选中的 provider（空 = 默认 .env）
   effectiveProvider: string;         // 实际生效的 provider（用于 ctx meter）
   defaultProvider: string;           // 从 /health 拿到的
+  /** v0.2+：/health 返回的当前 model（仅在用默认 provider 时准；override 时未知 model） */
+  defaultModel?: string;
+  /** v0.2+：server 计算出的 contextWindow（tokens）；未 override provider 时直接用 */
+  serverContextWindow?: number;
   onProviderChange: (p: string) => void;
   ctxUsage: {
     lastInputTokens: number;
@@ -35,7 +39,7 @@ interface Props {
 
 export function Topbar({
   title, canRename, onRename,
-  provider, effectiveProvider, defaultProvider, onProviderChange,
+  provider, effectiveProvider, defaultProvider, defaultModel, serverContextWindow, onProviderChange,
   ctxUsage, onMenu, onNew,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -100,6 +104,9 @@ export function Topbar({
         <ThemeToggle />
         <CtxMeter
           provider={effectiveProvider}
+          /* 用户切到非默认 provider 时 model / contextWindow 未知，传 undefined 让 CtxMeter 走前端表前缀匹配 */
+          model={effectiveProvider === defaultProvider ? defaultModel : undefined}
+          contextWindow={effectiveProvider === defaultProvider ? serverContextWindow : undefined}
           lastInputTokens={ctxUsage.lastInputTokens}
           sessionTotalIn={ctxUsage.sessionTotalIn}
           sessionTotalOut={ctxUsage.sessionTotalOut}

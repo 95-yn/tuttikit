@@ -5,4 +5,5 @@ input: "2 * 8"
 expect:
   must_call_tool: calculator
   max_steps: 2
-  max_tokens: 2000
+  # cap 用来拦 agent 跑太久，不是卡 system+skills overhead。mock 报 50/50 是假数据。
+  max_tokens: 8000

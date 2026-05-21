@@ -1,7 +1,15 @@
 id: file-ops-002-write-txt
 category: file-ops
-tags: [delegate, coder]
+tags: [coder, write]
 input: "把上面的总结写到一个 .txt 文件里"
 expect:
-  must_call_tool: delegate_to_coder
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+  max_steps: 6
+  # "上面"在新会话里指代不明，礼貌反问比硬猜内容更合理
+  judge_prompt: |
+    有效回答（任一）：
+    1) 已写入合理的 .txt（基于上下文最小假设）；
+    2) 要求用户给出"上面的总结"具体是什么再写。
+    扣分：胡编不相关内容 / 假装写了但没真写
+  judge_min_score: 3

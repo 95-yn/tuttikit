@@ -1,8 +1,12 @@
 'use client';
-import { CONTEXT_WINDOW, DEFAULT_CTX_WINDOW, fmtTokens } from '@/lib/tokens';
+import { getContextWindow, fmtTokens } from '@/lib/tokens';
 
 interface Props {
   provider: string;
+  /** v0.2+：当前 model（从 /health 拿；override provider 时未知）*/
+  model?: string;
+  /** v0.2+：server 计算好的上下文窗口（首选）；未提供则按 provider+model 查前端表 */
+  contextWindow?: number;
   lastInputTokens: number;
   sessionTotalIn: number;
   sessionTotalOut: number;
@@ -13,10 +17,12 @@ interface Props {
 }
 
 export function CtxMeter({
-  provider, lastInputTokens, sessionTotalIn, sessionTotalOut,
+  provider, model, contextWindow,
+  lastInputTokens, sessionTotalIn, sessionTotalOut,
   sessionUSD, budgetWarn,
 }: Props) {
-  const max = CONTEXT_WINDOW[provider] || DEFAULT_CTX_WINDOW;
+  // 优先用 server 传的；其次按 (provider, model) 查前端表；最后兜底
+  const max = contextWindow ?? getContextWindow(provider, model);
   const pct = Math.min(100, Math.round((lastInputTokens / max) * 100));
   const fillCls = pct >= 90 ? 'ctx-bar-fill error' : pct >= 70 ? 'ctx-bar-fill warn' : 'ctx-bar-fill';
   // budget 颜色覆盖 ctx 颜色（账单更重要）
@@ -25,9 +31,10 @@ export function CtxMeter({
     : null;
   const wrapperCls = budgetState ? `ctx-meter ctx-budget-${budgetState}` : 'ctx-meter';
 
+  const providerLabel = model ? `${provider} · ${model}` : provider;
   const title =
     `当前上下文（最近一次请求 input）：${lastInputTokens.toLocaleString()} tokens\n` +
-    `模型窗口（${provider}）：${max.toLocaleString()} tokens\n` +
+    `模型窗口（${providerLabel}）：${max.toLocaleString()} tokens\n` +
     `会话累计：↓ ${sessionTotalIn.toLocaleString()} in · ↑ ${sessionTotalOut.toLocaleString()} out` +
     (typeof sessionUSD === 'number' ? `\n本会话花费：$${sessionUSD.toFixed(4)}` : '') +
     (budgetWarn ? `\n⚠️ ${budgetWarn.scope === 'session' ? '会话' : '当日'}预算已达 ${Math.round(budgetWarn.ratio * 100)}%` : '');

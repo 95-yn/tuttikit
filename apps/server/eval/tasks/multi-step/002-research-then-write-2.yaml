@@ -1,8 +1,18 @@
 id: multi-step-002-research-then-write-2
 category: multi-step
-tags: [delegate, multi-step]
+tags: [multi-step, research, write]
 input: "研究下 transformer 架构，然后生成一个 report.md"
 expect:
-  must_call_tool:
-    - delegate_to_researcher
-  max_steps: 5
+  # 完成任务需要：调研工具 + 写文件，但用什么具体 tool 由模型自决（直接 web_search+write 或先 delegate 都 ok）
+  must_not_call_tool:
+    - calculator
+  max_steps: 18              # 研究 + 写文件 + delegate args 偶尔需要重试
+  max_tokens: 300000
+  judge_prompt: |
+    最终应当成功产出一个 transformer 主题的 markdown 文档（写到 data/ 或类似目录）。
+    内容质量要求：
+    1) 提到 transformer 的核心组件（attention / encoder-decoder / multi-head 等至少 2 个）；
+    2) 结构清晰（有标题或分段）；
+    3) 不全是空话。
+    扣分：没有真正写文件 / 写了但内容是占位符 / 概念错误
+  judge_min_score: 3

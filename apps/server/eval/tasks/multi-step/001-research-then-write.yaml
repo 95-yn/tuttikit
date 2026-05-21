@@ -1,8 +1,17 @@
 id: multi-step-001-research-then-write
 category: multi-step
-tags: [delegate, multi-step, research, write]
+tags: [multi-step, research, write]
 input: "调研一下 pgvector，然后把结论写到 data/pgvector.md 文件里"
 expect:
-  must_call_tool:
-    - delegate_to_researcher
-  max_steps: 5
+  must_not_call_tool:
+    - calculator
+  max_steps: 15              # 调研 + 写文件需要多步
+  max_tokens: 150000
+  judge_prompt: |
+    最终应当在 data/ 写出一份 pgvector 主题的 markdown 文档。
+    内容质量要求：
+    1) 说明 pgvector 是 Postgres 的向量扩展；
+    2) 提到至少一个核心能力（vector 类型 / 相似度索引 / 距离函数等）；
+    3) 写到了文件里（不是只在对话里说说）。
+    扣分：没真写文件 / 内容是空模板 / 概念错误
+  judge_min_score: 3

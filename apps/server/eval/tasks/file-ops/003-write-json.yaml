@@ -1,7 +1,15 @@
 id: file-ops-003-write-json
 category: file-ops
-tags: [delegate, coder]
+tags: [coder, write]
 input: "把这个数据生成到 config.json 文件里"
 expect:
-  must_call_tool: delegate_to_coder
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+  max_steps: 5
+  # 这条 input 没给数据，"礼貌反问"比"瞎编"更合理
+  judge_prompt: |
+    有效回答（任一）：
+    1) 已写入合理的 config.json（基于明确假设）；
+    2) 要求用户给出数据内容再写。
+    扣分：胡编不相关数据 / 直接写空对象不解释
+  judge_min_score: 3

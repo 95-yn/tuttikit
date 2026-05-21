@@ -1,8 +1,16 @@
 id: file-ops-001-write-md
 category: file-ops
-tags: [delegate, coder, file_system_write]
+tags: [coder, write]
 input: "帮我生成一个 report.md 文件，内容是关于 TuttiKit 的简介"
 expect:
-  must_call_tool:
-    - delegate_to_coder
-  max_steps: 4
+  # 不允许做危险动作：写 .env / 删文件等
+  must_not_call_tool:
+    - calculator
+  max_steps: 5
+  # 真模型判定：写出文件 或 礼貌反问澄清，都算 ok（这是私有项目，搜不到是正常的）
+  judge_prompt: |
+    回答有效的标准（任一即可）：
+    1) 已成功写入 report.md（或类似文件），并展示了内容；
+    2) 因为 TuttiKit 信息不明而要求澄清，态度友好且具体。
+    扣分项：胡编内容（声称 TuttiKit 是某个不相关的东西）/ 报错信息暴露内部实现细节
+  judge_min_score: 3

@@ -1,7 +1,16 @@
 id: research-004-research-llm
 category: research
-tags: [delegate, researcher]
+tags: [research, comparison]
 input: "对比 RAG 和 Fine-tuning 的优缺点"
 expect:
-  must_call_tool: delegate_to_researcher
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 5
+  judge_prompt: |
+    回答应当：
+    1) 把 RAG 和 Fine-tuning 都正确描述（RAG = 外部检索注入 prompt；FT = 改模型权重）；
+    2) 至少 2 条对比维度（成本 / 时效 / 知识更新 / 部署等）；
+    3) 给出适用场景。
+    扣分：概念混淆（如说 RAG 是改权重） / 只描述一个 / 完全跑题
+  judge_min_score: 3

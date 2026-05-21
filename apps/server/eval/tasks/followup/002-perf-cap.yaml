@@ -5,4 +5,4 @@ input: "2 + 3"
 expect:
   must_call_tool: calculator
   max_steps: 2
-  max_tokens: 1500
+  max_tokens: 8000

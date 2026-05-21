@@ -88,7 +88,58 @@ const sseLimiter: RequestHandler = (req, res, next) => {
   next();
 };
 
-app.get('/health', (_req, res) => res.json({ ok: true, provider: config.llm.provider }));
+app.get('/health', (_req, res) => {
+  // 暴露当前 provider + model + 上下文窗口，让前端 CtxMeter 不再硬编码窗口
+  const provider = config.llm.provider;
+  const model = currentModelOf(provider);
+  res.json({
+    ok: true,
+    provider,
+    model,
+    contextWindow: contextWindowOf(provider, model),
+  });
+});
+
+/** 取当前 provider 配置里的 model 名（mock 也给一个合理值） */
+function currentModelOf(provider: string): string {
+  if (provider === 'mock') return 'mock';
+  const cfg = (config.llm as unknown as Record<string, { model?: string } | undefined>)[provider];
+  return cfg?.model || '';
+}
+
+/** 各 provider × model 的 context window 上限；和 web 端 tokens.ts 同步 */
+function contextWindowOf(provider: string, model: string): number {
+  const table: Record<string, number> = {
+    'anthropic:claude-opus-4':    200_000,
+    'anthropic:claude-sonnet-4':  200_000,
+    'anthropic:claude-haiku-4':   200_000,
+    'anthropic:claude-3-5-sonnet': 200_000,
+    'anthropic:claude-3-5-haiku':  200_000,
+    'openai:gpt-4o':              128_000,
+    'openai:gpt-4o-mini':         128_000,
+    'openai:gpt-4.1':           1_047_576,
+    'openai:gpt-4.1-mini':      1_047_576,
+    'openai:o1':                  200_000,
+    'openai:o3-mini':             200_000,
+    'deepseek:deepseek-chat':     128_000,
+    'deepseek:deepseek-reasoner':  64_000,
+    'mock:mock':                    8_000,
+  };
+  // 精确
+  const exact = table[`${provider}:${model}`];
+  if (exact) return exact;
+  // 前缀（claude-sonnet-4-6 → claude-sonnet-4）
+  let bestKey: string | null = null;
+  const prefix = `${provider}:`;
+  for (const k of Object.keys(table)) {
+    if (!k.startsWith(prefix)) continue;
+    const tail = k.slice(prefix.length);
+    if (model.startsWith(tail) && (!bestKey || tail.length > bestKey.length)) bestKey = tail;
+  }
+  if (bestKey) return table[`${provider}:${bestKey}`];
+  // provider 兜底
+  return { anthropic: 200_000, openai: 128_000, deepseek: 128_000, mock: 8_000 }[provider] ?? 32_000;
+}
 
 /** /ready：比 /health 严格——还要能写 data 目录 + LLM provider 配置正常。给 K8s readinessProbe 用。 */
 app.get('/ready', async (_req, res) => {

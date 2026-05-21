@@ -1,7 +1,14 @@
 id: file-ops-004-write-py
 category: file-ops
-tags: [delegate, coder, code]
+tags: [coder, write, code]
 input: "帮我创建一个 hello.py 文件"
 expect:
-  must_call_tool: delegate_to_coder
-  max_steps: 4
+  # 这个 input 很明确，模型应该真的写出文件
+  must_call_tool:
+    - file_system_write
+  must_not_call_tool:
+    - calculator
+  max_steps: 5
+  judge_prompt: |
+    hello.py 写入成功，且内容是合理的 Python "Hello, World!" 或类似最小可运行示例
+  judge_min_score: 3

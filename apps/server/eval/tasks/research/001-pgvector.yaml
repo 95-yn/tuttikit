@@ -1,8 +1,15 @@
 id: research-001-pgvector
 category: research
-tags: [delegate, researcher, multi-tool]
+tags: [research]
 input: "调研一下 pgvector，给我一段概念介绍"
 expect:
-  must_call_tool:
-    - delegate_to_researcher
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 5
+  judge_prompt: |
+    回答应当：
+    1) 准确说明 pgvector 是 Postgres 的向量扩展；
+    2) 提到核心能力（vector 类型 / 相似度索引 / 距离函数等至少一项）；
+    3) 不胡编（如说成"Python 库"就扣分）。
+  judge_min_score: 3

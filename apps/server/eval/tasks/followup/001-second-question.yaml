@@ -1,6 +1,7 @@
 id: followup-001-second-question
 category: followup
 tags: [calculator, followup]
+# 真模型可能心算 8*7=56 不调 calculator，预期失败。
 input: "那 8 * 7 呢"
 expect:
   must_call_tool: calculator

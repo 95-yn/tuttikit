@@ -23,6 +23,8 @@ export default function ChatPage() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [defaultProvider, setDefaultProvider] = useState('mock');
+  const [defaultModel, setDefaultModel] = useState<string>('');
+  const [serverContextWindow, setServerContextWindow] = useState<number | undefined>(undefined);
   const [providerOverride, setProviderOverride] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -39,6 +41,8 @@ export default function ChatPage() {
   useEffect(() => {
     api.getHealth().then((h) => {
       if (h?.provider) setDefaultProvider(h.provider);
+      if (h?.model) setDefaultModel(h.model);
+      if (typeof h?.contextWindow === 'number') setServerContextWindow(h.contextWindow);
     }).catch(() => {});
     refreshSessions().then((list) => {
       if (list.length) loadSession(list[0].id);
@@ -258,6 +262,8 @@ export default function ChatPage() {
             provider={providerOverride}
             effectiveProvider={effectiveProvider}
             defaultProvider={defaultProvider}
+            defaultModel={defaultModel}
+            serverContextWindow={serverContextWindow}
             onProviderChange={setProviderOverride}
             ctxUsage={chat.ctxUsage}
             onMenu={() => setDrawerOpen(true)}

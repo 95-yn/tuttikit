@@ -1,7 +1,16 @@
 id: research-005-principle
 category: research
-tags: [delegate, researcher, principle]
+tags: [research, principle]
 input: "请介绍 attention 机制的原理"
 expect:
-  must_call_tool: delegate_to_researcher
-  max_steps: 4
+  must_not_call_tool:
+    - calculator
+    - file_system_write
+  max_steps: 5
+  judge_prompt: |
+    回答应当：
+    1) 解释 attention 的核心（让模型 focus 到输入中的关键部分）；
+    2) 至少提到 Q/K/V 或 softmax 加权这一类技术细节之一；
+    3) 不胡编公式。
+    扣分：完全空话不讲技术 / 错误描述
+  judge_min_score: 3

@@ -51,6 +51,8 @@ export function isRetryable(err: unknown): boolean {
   const msg = String(e.message || err);
   if (/\b(429|5\d{2})\b/.test(msg)) return true;
   if (/fetch failed|network|timeout|socket hang up/i.test(msg)) return true;
+  // AI SDK / provider 偶发解析错误（DeepSeek 实际碰到过）—— body 看似成功但 JSON 解析挂；重试常能成功
+  if (/Failed to process successful response|response_format|invalid_response|malformed response/i.test(msg)) return true;
   return false;
 }
 
