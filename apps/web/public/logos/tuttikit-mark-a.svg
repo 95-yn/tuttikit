@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>TuttiKit Mark A · Conductor T</title>
+  <!-- 字母 T：上横 + 中竖。T 代表 TuttiKit 也代表「指挥棒」 -->
+  <rect x="10" y="13" width="44" height="8" rx="1.5" fill="currentColor"/>
+  <rect x="28" y="13" width="8" height="32" rx="1.5" fill="currentColor"/>
+  <!-- T 下端分三股延展线，对应 Conductor 委派的 3 个 sub-agent -->
+  <path d="M32 47 L18 56" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M32 47 L32 58" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M32 47 L46 56" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <!-- 3 个 agent 节点（实心） -->
+  <circle cx="18" cy="56" r="3.2" fill="currentColor"/>
+  <circle cx="32" cy="58" r="3.2" fill="currentColor"/>
+  <circle cx="46" cy="56" r="3.2" fill="currentColor"/>
+</svg>

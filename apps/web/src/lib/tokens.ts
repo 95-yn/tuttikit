@@ -24,6 +24,28 @@ export const CONTEXT_WINDOW: Record<string, number> = {
   'deepseek:deepseek-chat':     128_000,
   'deepseek:deepseek-reasoner':  64_000,
 
+  // ── 阿里通义 Qwen ──
+  'qwen:qwen-max':               32_000,
+  'qwen:qwen-plus':             131_072,
+  'qwen:qwen-turbo':          1_000_000,
+  'qwen:qwen3':                262_144,
+  // ── 字节豆包 Doubao ──
+  'doubao:doubao-1-5-pro-32k':   32_000,
+  'doubao:doubao-1-5-pro-256k': 256_000,
+  'doubao:doubao-1-5-lite':      32_000,
+  // ── 腾讯混元 Hunyuan ──
+  'hunyuan:hunyuan-turbos':      32_000,
+  'hunyuan:hunyuan-large':       32_000,
+  'hunyuan:hunyuan-standard':    32_000,
+  // ── 智谱 GLM ──
+  'glm:glm-4-plus':             128_000,
+  'glm:glm-4-flash':            128_000,
+  'glm:glm-4':                  128_000,
+  // ── Moonshot Kimi ──
+  'kimi:moonshot-v1-8k':          8_000,
+  'kimi:moonshot-v1-32k':        32_000,
+  'kimi:moonshot-v1-128k':      128_000,
+
   // ── Mock ──
   'mock:mock':                    8_000,
   mock:                           8_000,
@@ -32,6 +54,11 @@ export const CONTEXT_WINDOW: Record<string, number> = {
   anthropic: 200_000,
   openai:    128_000,
   deepseek:  128_000,
+  qwen:      131_072,
+  doubao:     32_000,
+  hunyuan:    32_000,
+  glm:       128_000,
+  kimi:       32_000,
 };
 
 export const DEFAULT_CTX_WINDOW = 32_000;

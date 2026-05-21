@@ -123,6 +123,23 @@ function contextWindowOf(provider: string, model: string): number {
     'openai:o3-mini':             200_000,
     'deepseek:deepseek-chat':     128_000,
     'deepseek:deepseek-reasoner':  64_000,
+    // 国产 provider
+    'qwen:qwen-max':               32_000,
+    'qwen:qwen-plus':             131_072,
+    'qwen:qwen-turbo':          1_000_000,
+    'qwen:qwen3':                262_144,
+    'doubao:doubao-1-5-pro-32k':   32_000,
+    'doubao:doubao-1-5-pro-256k': 256_000,
+    'doubao:doubao-1-5-lite':      32_000,
+    'hunyuan:hunyuan-turbos':      32_000,
+    'hunyuan:hunyuan-large':       32_000,
+    'hunyuan:hunyuan-standard':    32_000,
+    'glm:glm-4-plus':             128_000,
+    'glm:glm-4-flash':            128_000,
+    'glm:glm-4':                  128_000,
+    'kimi:moonshot-v1-8k':          8_000,
+    'kimi:moonshot-v1-32k':        32_000,
+    'kimi:moonshot-v1-128k':      128_000,
     'mock:mock':                    8_000,
   };
   // 精确
@@ -138,7 +155,11 @@ function contextWindowOf(provider: string, model: string): number {
   }
   if (bestKey) return table[`${provider}:${bestKey}`];
   // provider 兜底
-  return { anthropic: 200_000, openai: 128_000, deepseek: 128_000, mock: 8_000 }[provider] ?? 32_000;
+  return {
+    anthropic: 200_000, openai: 128_000, deepseek: 128_000,
+    qwen: 131_072, doubao: 32_000, hunyuan: 32_000, glm: 128_000, kimi: 32_000,
+    mock: 8_000,
+  }[provider] ?? 32_000;
 }
 
 /** /ready：比 /health 严格——还要能写 data 目录 + LLM provider 配置正常。给 K8s readinessProbe 用。 */

@@ -11,6 +11,12 @@ const PROVIDER_META: Record<string, { color: string; label: string }> = {
   anthropic: { color: '#D97757', label: 'Claude' },
   openai:    { color: '#10A37F', label: 'GPT' },
   deepseek:  { color: '#4D6BFE', label: 'DeepSeek' },
+  // 国产 provider：取自各家品牌色（无 logo 时用色点+短名也够辨识）
+  qwen:      { color: '#615CED', label: '通义' },     // 阿里紫
+  doubao:    { color: '#3B82F6', label: '豆包' },     // 火山蓝
+  hunyuan:   { color: '#00A4FF', label: '混元' },     // 腾讯蓝
+  glm:       { color: '#1E1E1E', label: 'GLM' },      // 智谱黑
+  kimi:      { color: '#000000', label: 'Kimi' },     // Moonshot 黑
   mock:      { color: '#8A8E99', label: 'Mock' },
 };
 
@@ -139,9 +145,18 @@ function ProviderBadge({
       >
         <option value="">默认 (.env)</option>
         <option value="mock">mock</option>
-        <option value="anthropic">anthropic</option>
-        <option value="openai">openai</option>
-        <option value="deepseek">deepseek</option>
+        <optgroup label="海外">
+          <option value="anthropic">Claude (anthropic)</option>
+          <option value="openai">GPT (openai)</option>
+        </optgroup>
+        <optgroup label="国产">
+          <option value="deepseek">DeepSeek</option>
+          <option value="qwen">通义 (qwen)</option>
+          <option value="doubao">豆包 (doubao)</option>
+          <option value="hunyuan">混元 (hunyuan)</option>
+          <option value="glm">智谱 (glm)</option>
+          <option value="kimi">Kimi (moonshot)</option>
+        </optgroup>
       </select>
     </label>
   );

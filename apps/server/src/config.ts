@@ -13,6 +13,12 @@ export interface AppConfig {
     anthropic: { apiKey?: string; model: string };
     openai:    { apiKey?: string; model: string; baseURL: string };
     deepseek:  { apiKey?: string; model: string; baseURL: string };
+    // ── 国产 provider，全部走 OpenAI 兼容协议（@ai-sdk/openai-compatible）──
+    qwen:      { apiKey?: string; model: string; baseURL: string };   // 阿里通义
+    doubao:    { apiKey?: string; model: string; baseURL: string };   // 字节豆包 / 火山引擎
+    hunyuan:   { apiKey?: string; model: string; baseURL: string };   // 腾讯混元
+    glm:       { apiKey?: string; model: string; baseURL: string };   // 智谱 GLM
+    kimi:      { apiKey?: string; model: string; baseURL: string };   // Moonshot Kimi
   };
   server: {
     port: number;
@@ -69,6 +75,32 @@ export const config: AppConfig = {
       model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
       baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
     },
+    qwen: {
+      apiKey: process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY,
+      model: process.env.QWEN_MODEL || 'qwen-plus',
+      baseURL: process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    },
+    doubao: {
+      apiKey: process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY,
+      // 火山引擎需要 endpoint id（如 ep-xxx）作为 model；常见模型示例 doubao-1-5-pro-32k
+      model: process.env.DOUBAO_MODEL || 'doubao-1-5-pro-32k-250115',
+      baseURL: process.env.DOUBAO_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+    },
+    hunyuan: {
+      apiKey: process.env.HUNYUAN_API_KEY,
+      model: process.env.HUNYUAN_MODEL || 'hunyuan-turbos-latest',
+      baseURL: process.env.HUNYUAN_BASE_URL || 'https://api.hunyuan.cloud.tencent.com/v1',
+    },
+    glm: {
+      apiKey: process.env.GLM_API_KEY || process.env.ZHIPU_API_KEY,
+      model: process.env.GLM_MODEL || 'glm-4-plus',
+      baseURL: process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
+    },
+    kimi: {
+      apiKey: process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY,
+      model: process.env.KIMI_MODEL || 'moonshot-v1-32k',
+      baseURL: process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1',
+    },
   },
   server: {
     port: Number(process.env.PORT || 3001),
@@ -108,20 +140,37 @@ const optKey = z.string().optional().transform((v) => (v && v.length > 0 ? v : u
 
 const BootEnv = z.object({
   PORT: z.string().regex(/^\d+$/).optional(),
-  LLM_PROVIDER: z.enum(['anthropic', 'openai', 'deepseek', 'mock']).default('mock'),
+  LLM_PROVIDER: z.enum([
+    'anthropic', 'openai', 'deepseek', 'mock',
+    'qwen', 'doubao', 'hunyuan', 'glm', 'kimi',
+  ]).default('mock'),
   ANTHROPIC_API_KEY: optKey,
   OPENAI_API_KEY: optKey,
   DEEPSEEK_API_KEY: optKey,
+  QWEN_API_KEY: optKey,      DASHSCOPE_API_KEY: optKey,
+  DOUBAO_API_KEY: optKey,    ARK_API_KEY: optKey,
+  HUNYUAN_API_KEY: optKey,
+  GLM_API_KEY: optKey,       ZHIPU_API_KEY: optKey,
+  KIMI_API_KEY: optKey,      MOONSHOT_API_KEY: optKey,
 }).superRefine((v, ctx) => {
-  if (v.LLM_PROVIDER === 'anthropic' && !v.ANTHROPIC_API_KEY) {
-    ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=anthropic 但缺 ANTHROPIC_API_KEY' });
-  }
-  if (v.LLM_PROVIDER === 'openai' && !v.OPENAI_API_KEY) {
-    ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=openai 但缺 OPENAI_API_KEY' });
-  }
-  if (v.LLM_PROVIDER === 'deepseek' && !v.DEEPSEEK_API_KEY) {
-    ctx.addIssue({ code: 'custom', message: 'LLM_PROVIDER=deepseek 但缺 DEEPSEEK_API_KEY' });
-  }
+  const need = (provider: string, keys: string[]): void => {
+    if (v.LLM_PROVIDER !== provider) return;
+    const ok = keys.some((k) => Boolean((v as unknown as Record<string, string | undefined>)[k]));
+    if (!ok) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `LLM_PROVIDER=${provider} 但缺 ${keys.join(' 或 ')}`,
+      });
+    }
+  };
+  need('anthropic', ['ANTHROPIC_API_KEY']);
+  need('openai',    ['OPENAI_API_KEY']);
+  need('deepseek',  ['DEEPSEEK_API_KEY']);
+  need('qwen',      ['QWEN_API_KEY', 'DASHSCOPE_API_KEY']);
+  need('doubao',    ['DOUBAO_API_KEY', 'ARK_API_KEY']);
+  need('hunyuan',   ['HUNYUAN_API_KEY']);
+  need('glm',       ['GLM_API_KEY', 'ZHIPU_API_KEY']);
+  need('kimi',      ['KIMI_API_KEY', 'MOONSHOT_API_KEY']);
 });
 
 export function validateEnvOnBoot(): { ok: true } | { ok: false; errors: string[] } {

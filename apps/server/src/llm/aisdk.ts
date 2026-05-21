@@ -16,6 +16,13 @@ const PROVIDER_CAPS: Record<string, { image: boolean; pdf: boolean }> = {
   anthropic: { image: true, pdf: true },
   openai:    { image: true, pdf: false },
   deepseek:  { image: false, pdf: false },
+  // 国产 provider 默认按"纯文本"看：图片走 OCR 抽文本，PDF 走 pdf-parse 抽文本（已经在 _toModelMessages 处理）
+  // qwen-vl / doubao-vision 这种多模态变体如果要走原生，单独切换 model 即可；这里默认 false 更安全
+  qwen:      { image: false, pdf: false },
+  doubao:    { image: false, pdf: false },
+  hunyuan:   { image: false, pdf: false },
+  glm:       { image: false, pdf: false },
+  kimi:      { image: false, pdf: false },
   mock:      { image: false, pdf: false },
 };
 
@@ -44,6 +51,48 @@ export function createAISDKModel(providerName: string, providerCfg: ProviderCfg)
         baseURL: providerCfg.baseURL || 'https://api.deepseek.com/v1',
       });
       return { model: ds(providerCfg.model), name: 'deepseek' };
+    }
+    // ── 国产 provider，全部 OpenAI 兼容协议 ──
+    case 'qwen': {
+      const qw = createOpenAICompatible({
+        name: 'qwen',
+        apiKey: providerCfg.apiKey,
+        baseURL: providerCfg.baseURL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      });
+      return { model: qw(providerCfg.model), name: 'qwen' };
+    }
+    case 'doubao': {
+      // 火山引擎 ark；model 字段需要是 endpoint id（如 ep-xxx 或 doubao-1-5-pro-32k-250115）
+      const db = createOpenAICompatible({
+        name: 'doubao',
+        apiKey: providerCfg.apiKey,
+        baseURL: providerCfg.baseURL || 'https://ark.cn-beijing.volces.com/api/v3',
+      });
+      return { model: db(providerCfg.model), name: 'doubao' };
+    }
+    case 'hunyuan': {
+      const hy = createOpenAICompatible({
+        name: 'hunyuan',
+        apiKey: providerCfg.apiKey,
+        baseURL: providerCfg.baseURL || 'https://api.hunyuan.cloud.tencent.com/v1',
+      });
+      return { model: hy(providerCfg.model), name: 'hunyuan' };
+    }
+    case 'glm': {
+      const gl = createOpenAICompatible({
+        name: 'glm',
+        apiKey: providerCfg.apiKey,
+        baseURL: providerCfg.baseURL || 'https://open.bigmodel.cn/api/paas/v4',
+      });
+      return { model: gl(providerCfg.model), name: 'glm' };
+    }
+    case 'kimi': {
+      const km = createOpenAICompatible({
+        name: 'kimi',
+        apiKey: providerCfg.apiKey,
+        baseURL: providerCfg.baseURL || 'https://api.moonshot.cn/v1',
+      });
+      return { model: km(providerCfg.model), name: 'kimi' };
     }
     default:
       throw new Error(`AI SDK 不支持的 provider: ${providerName}`);

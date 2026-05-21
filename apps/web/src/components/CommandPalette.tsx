@@ -31,6 +31,11 @@ const PROVIDERS = [
   { id: 'anthropic', label: 'Anthropic Claude' },
   { id: 'openai', label: 'OpenAI GPT' },
   { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'qwen', label: '阿里 通义 (qwen)' },
+  { id: 'doubao', label: '字节 豆包 (doubao)' },
+  { id: 'hunyuan', label: '腾讯 混元 (hunyuan)' },
+  { id: 'glm', label: '智谱 GLM' },
+  { id: 'kimi', label: 'Moonshot Kimi' },
 ];
 
 export function CommandPalette({

@@ -38,6 +38,32 @@ export const PRICING_TABLE: Record<string, ModelPricing> = {
   'deepseek:deepseek-chat':     { input: 0.27, output: 1.10 },
   'deepseek:deepseek-reasoner': { input: 0.55, output: 2.19 },
 
+  // ── 阿里通义 Qwen（USD 价；按官方人民币 × 0.14 估算）──
+  'qwen:qwen-max':    { input: 2.40, output: 9.60 },
+  'qwen:qwen-plus':   { input: 0.40, output: 1.20 },
+  'qwen:qwen-turbo':  { input: 0.05, output: 0.20 },
+  'qwen:qwen3':       { input: 0.40, output: 1.20 },     // qwen3-* 系列前缀匹配
+
+  // ── 字节豆包 Doubao ──
+  'doubao:doubao-1-5-pro-32k':  { input: 0.11, output: 0.27 },
+  'doubao:doubao-1-5-pro-256k': { input: 0.69, output: 1.38 },
+  'doubao:doubao-1-5-lite':     { input: 0.04, output: 0.11 },
+
+  // ── 腾讯混元 Hunyuan ──
+  'hunyuan:hunyuan-turbos':  { input: 0.11, output: 0.55 },
+  'hunyuan:hunyuan-large':   { input: 0.55, output: 2.21 },
+  'hunyuan:hunyuan-standard':{ input: 0.07, output: 0.14 },
+
+  // ── 智谱 GLM ──
+  'glm:glm-4-plus':  { input: 0.69, output: 0.69 },
+  'glm:glm-4-flash': { input: 0.01, output: 0.01 },
+  'glm:glm-4':       { input: 1.38, output: 1.38 },
+
+  // ── Moonshot Kimi ──
+  'kimi:moonshot-v1-8k':   { input: 1.65, output: 1.65 },
+  'kimi:moonshot-v1-32k':  { input: 3.31, output: 3.31 },
+  'kimi:moonshot-v1-128k': { input: 8.27, output: 8.27 },
+
   // ── Mock：免费 ──
   'mock:mock': { input: 0, output: 0 },
 };
