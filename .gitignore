@@ -69,6 +69,9 @@ scratch.md
 TODO-personal.md
 .private/
 private/
+# 技术博客原稿：本地放着 / 发布到平台之前不进库
+docs/blog/
+blog/
 
 # ───── Logs ─────
 *.log

@@ -13,7 +13,12 @@
     "test:aisdk": "tsx examples/test-aisdk-integration.ts",
     "test:conductor": "tsx examples/test-conductor.ts",
     "test:markdown": "tsx examples/test-markdown.ts",
-    "test": "npm run test:aisdk && npm run test:conductor && npm run test:markdown && npm run test:skills && npm run test:mcp && npm run test:resilience && npm run test:safety && npm run test:budget && npm run test:rag && npm run test:planner",
+    "test": "npm run test:aisdk && npm run test:conductor && npm run test:markdown && npm run test:skills && npm run test:mcp && npm run test:resilience && npm run test:safety && npm run test:budget && npm run test:rag && npm run test:planner && npm run test:compact && npm run test:safety-hooks && npm run test:approval && npm run test:session-concurrency",
+    "test:safety-hooks": "tsx examples/test-safety-hooks.ts",
+    "test:approval": "tsx examples/test-approval.ts",
+    "test:session-concurrency": "tsx examples/test-session-concurrency.ts",
+    "test:parallel": "tsx scripts/test-all.ts",
+    "test:sqlite-migration": "tsx examples/test-sqlite-migration.ts",
     "test:skills": "tsx examples/test-skills.ts",
     "test:mcp": "tsx examples/test-mcp.ts",
     "test:resilience": "tsx examples/test-resilience.ts",
@@ -21,10 +26,11 @@
     "test:budget": "tsx examples/test-budget.ts",
     "test:rag": "tsx examples/test-rag.ts",
     "test:planner": "tsx examples/test-planner.ts",
-    "eval": "tsx eval/cli.mjs"
+    "test:compact": "tsx examples/test-compact.ts",
+    "eval": "tsx eval/cli.ts"
   },
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=22.5.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",

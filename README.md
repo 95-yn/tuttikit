@@ -126,6 +126,12 @@ CLI 与 web 共享 sessions、skills、MCP（启动期 init 同套 loader）。
 - Memory compact：超阈值聚类 → LLM 合并摘要；exact + 向量 dedup；LRU evict
 - VectorStore 接口预留（sqlite-vec 迁移文档已就绪）
 
+**上下文管理（C+D 混合策略）**
+- 实现：`apps/server/src/core/sessionCompact.ts`
+- 设计：触达 **60% 上下文窗口阈值** 自动压缩；最近 **K=8** 条原样保留 + 老消息批量摘要 + 全部进 archive 可被 RAG 召回
+- 配置（env）：`COMPACT_TRIGGER_RATIO` / `COMPACT_KEEP_RECENT_N` / `COMPACT_BATCH_SIZE` / `RECALL_TOP_K`
+- 实测效果：5107 → 1409 token，**省 72%**，无信息损失（老消息走召回兜底）
+
 **i18n（中文）**
 - Skills 详情按需翻译，落盘 `data/skills-zh/<name>.zh.md` 可直接打开
 - Skills 列表名批量翻译，落 `data/skills-zh/_names.zh.json`
@@ -136,6 +142,9 @@ CLI 与 web 共享 sessions、skills、MCP（启动期 init 同套 loader）。
 - fileSystem 写入 allowlist（`data/ tmp/ output/`）+ denylist（`.env / .git / package.json`）
 - Prompt injection：`<user-attachment>` 隔离 + system 加防护
 - pre-commit hook 拦小红书 / 草稿 / API key 提交
+- **安全 hook（硬拦截）**：`core/safetyRules.ts` + `core/hooks.ts`，14 条内置危险模式（`rm -rf /` / fork bomb / `DROP DATABASE` / `curl | sh` / `format c:` 等），hook 调用点在 `ToolRegistry.invoke` 内，conductor + 所有 sub-agent 路径都吃；自定义走 `SAFETY_EXTRA_RULES`（JSON array）
+- **动态审批 hook（灰色操作走人工 Approve）**：`core/approval.ts`，5 条内置规则（`git reset --hard` / `git push --force` / 写系统路径 等）；前端弹黄色 sticky 横幅，`Cmd/Ctrl+Enter` Approve / `Esc` Deny，30 秒倒计时；HTTP `POST /sessions/:id/permissions/:reqId/answer`；env `APPROVAL_TIMEOUT_MS` / `APPROVAL_EXTRA_RULES`
+- **Secret redact**：`core/redact.ts`，7 类（`sk-*` / GitHub PAT / AWS / Bearer / kv-pairs / JWT / PEM 私钥），在 `safety:denied` + `permission:requested` emit 前自动 redact，不会把敏感串泄露到 UI / 日志
 
 **可观测 / 评测**
 - 自建 Trace/Span 嵌套树，`/traces` UI
@@ -196,6 +205,8 @@ DEEPSEEK_MODEL=deepseek-chat
 | GET | `/sessions/:id/budget` | 会话累计 token / USD |
 | POST / GET | `/uploads` | 单文件上传 + 回源 |
 | GET | `/events` | 全局广播 SSE（多设备同步） |
+| POST | `/sessions/:id/permissions/:reqId/answer` | 审批回包（`{decision: "approve" \| "deny"}`） |
+| GET | `/debug/hooks` | 列当前生效的 safety + approval 规则（内置 + env 扩展合并后）|
 
 **Trace + Replay**
 
