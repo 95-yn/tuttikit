@@ -35,6 +35,31 @@ export class ToolInputError extends Error {
   }
 }
 
+/**
+ * Safety hook deny → 抛这个错。
+ * conductor / sub-agent 看到这个类型时知道是"被拦截"而不是"工具内部错"，
+ * 给 LLM 的 tool_result 用结构化 payload 而不是 generic message。
+ */
+export class SafetyDeniedError extends Error {
+  constructor(
+    public toolName: string,
+    public ruleName: string,
+    public denyReason: string,
+    public input: unknown,
+  ) {
+    super(`tool ${toolName} 被安全规则 ${ruleName} 拦截：${denyReason}`);
+    this.name = 'SafetyDeniedError';
+  }
+  toLLMPayload(): unknown {
+    return {
+      error: 'denied_by_safety_rule',
+      rule: this.ruleName,
+      reason: this.denyReason,
+      hint: '该操作被安全规则拦截，请改用更安全的方案或缩小操作范围。',
+    };
+  }
+}
+
 /** Tool handler 运行时抛错的统一包装，方便和 ToolInputError 区分 */
 export class ToolHandlerError extends Error {
   readonly toolName: string;

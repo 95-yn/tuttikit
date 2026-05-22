@@ -86,3 +86,25 @@ export async function uploadFile(file: File): Promise<Attachment> {
 export function uploadUrl(id: string): string {
   return `${API}/uploads/${id}`;
 }
+
+// ───── 动态审批 ─────
+export async function listPendingPermissions(sessionId: string): Promise<{
+  pending: Array<{
+    id: string; sessionId: string; toolName: string; input: unknown;
+    rule: string; reason: string; createdAt: number; timeoutMs: number;
+  }>;
+}> {
+  const r = await fetch(`${API}/sessions/${sessionId}/permissions`);
+  return r.json();
+}
+
+export async function answerPermission(
+  sessionId: string, requestId: string, allow: boolean,
+): Promise<{ ok: boolean; allow?: boolean; reason?: string }> {
+  const r = await fetch(`${API}/sessions/${sessionId}/permissions/${requestId}/answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ allow }),
+  });
+  return r.json();
+}

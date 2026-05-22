@@ -26,6 +26,11 @@ export interface RunArgs {
   tracer: Tracer;
   parentSpanId?: string | null;
   stream?: boolean;
+  /**
+   * 主 session 的 id（来自 conductor 调 delegate 时透传过来）。
+   * sub-agent 调 tool 时塞进 ToolCtx，让 hook（safety / approval）能识别归属。
+   */
+  sessionId?: string;
 }
 
 export interface RunResult {
@@ -70,7 +75,7 @@ export class BaseAgent {
     return this.systemPrompt;
   }
 
-  async run({ input, trace, tracer, parentSpanId = null, stream = false }: RunArgs): Promise<RunResult> {
+  async run({ input, trace, tracer, parentSpanId = null, stream = false, sessionId }: RunArgs): Promise<RunResult> {
     const span = tracer.startSpan(trace, 'agent', `${this.name}.run`, { parentId: parentSpanId, input });
     this.bus?.emit('agent:start', { agent: this.name, input });
     this.logger.info({ input }, 'agent run start');
@@ -134,6 +139,7 @@ export class BaseAgent {
               agent: this.name, trace, tracer,
               parentSpanId: toolSpan.spanId,
               bus: this.bus,
+              sessionId,    // 透传给 hook（safety / approval），让 sub-agent 路径的事件也归属正确 session
             });
             tracer.endSpan(trace, toolSpan, { output: truncate(result) });
             this.bus?.emit('tool:end', {
@@ -147,13 +153,27 @@ export class BaseAgent {
             });
           } catch (err) {
             const e = err as Error;
+            const errObj = err as { name?: string; toLLMPayload?: () => unknown; ruleName?: string; denyReason?: string };
             tracer.endSpan(trace, toolSpan, { status: 'error', error: err });
-            this.bus?.emit('tool:error', {
-              agent: this.name, tool: call.name, error: e.message, toolCallId: call.id,
-            });
-            const inputErr = err as { name?: string; toLLMPayload?: () => unknown };
-            const payload = inputErr?.name === 'ToolInputError' && typeof inputErr.toLLMPayload === 'function'
-              ? inputErr.toLLMPayload()
+            // sub-agent 路径也可能命中 safety hook（rm -rf 通过 delegate 调到这里），
+            // 区分 SafetyDeniedError / ToolInputError / 其他，让 LLM 看到结构化 payload
+            if (errObj?.name === 'SafetyDeniedError') {
+              this.bus?.emit('safety:denied', {
+                agent: this.name, tool: call.name, toolCallId: call.id,
+                rule: errObj.ruleName, reason: errObj.denyReason,
+              });
+              this.logger.warn(
+                { agent: this.name, tool: call.name, rule: errObj.ruleName },
+                '[safety] sub-agent 路径上的 tool call 被拦截',
+              );
+            } else {
+              this.bus?.emit('tool:error', {
+                agent: this.name, tool: call.name, error: e.message, toolCallId: call.id,
+              });
+            }
+            const payload = (errObj?.name === 'SafetyDeniedError' || errObj?.name === 'ToolInputError')
+              && typeof errObj.toLLMPayload === 'function'
+              ? errObj.toLLMPayload()
               : { error: e.message };
             this.memory.append({
               role: 'tool',

@@ -23,7 +23,9 @@ export type BroadcastEvent = SessionsChangedPayload | SessionUpdatedPayload;
 class Broadcaster extends EventEmitter {
   constructor() {
     super();
-    this.setMaxListeners(0);
+    // 改 0 → 100：每个 /events SSE 连接挂一个 listener，正常使用上限远低于 100。
+    // 设有限值让 Node 在 listener leak 时触发 MaxListenersExceededWarning，方便早发现 bug。
+    this.setMaxListeners(100);
   }
 
   sessionsChanged(reason: BroadcastReason, sessionId?: string): void {

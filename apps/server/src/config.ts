@@ -54,6 +54,39 @@ export interface AppConfig {
     /** V2 模式：显式逐步执行（plan:step:start/end 事件），代价是慢 N 倍 */
     planExplicitSteps: boolean;
   };
+  /** 上下文压缩（C+D 策略）的全部阈值，集中读 env 一次 */
+  compact: {
+    triggerRatio: number;
+    keepRecentN: number;
+    batchSize: number;
+    recallTopK: number;
+    recallMinSim: number;
+    archiveMaxEntries: number;
+    archiveGcKeepSummaries: number;
+  };
+  /** Tracer 内存 + 磁盘 retention */
+  tracer: {
+    maxInMemory: number;
+    diskRetentionDays: number;
+  };
+  /** Embedding provider 选择 */
+  embedding: {
+    provider: string;       // 'mock' | 'openai' | 'auto'
+  };
+  /** Debug endpoint 鉴权（/debug/hooks 等） */
+  debug: {
+    token?: string;
+  };
+  /** Safety / Approval hook 的 env 输入（原始 JSON 字符串，由 safetyRules.ts 解析） */
+  safety: {
+    /** SAFETY_EXTRA_RULES env 原值，JSON array 文本；为空 = 不加自定义规则 */
+    extraRulesRaw: string;
+  };
+  approval: {
+    timeoutMs: number;
+    /** APPROVAL_EXTRA_RULES env 原值 */
+    extraRulesRaw: string;
+  };
 }
 
 export const config: AppConfig = {
@@ -128,6 +161,32 @@ export const config: AppConfig = {
     autoReviewCode: process.env.AGENT_AUTO_REVIEW_CODE === 'true',
     planAndExecute: process.env.AGENT_PLAN_AND_EXECUTE === 'true',
     planExplicitSteps: process.env.AGENT_PLAN_EXPLICIT_STEPS === 'true',
+  },
+  compact: {
+    triggerRatio:           Number(process.env.COMPACT_TRIGGER_RATIO         || 0.6),
+    keepRecentN:            Number(process.env.COMPACT_KEEP_RECENT_N         || 8),
+    batchSize:              Number(process.env.COMPACT_BATCH_SIZE            || 8),
+    recallTopK:             Number(process.env.RECALL_TOP_K                  || 4),
+    recallMinSim:           Number(process.env.RECALL_MIN_SIM                || 0.30),
+    archiveMaxEntries:      Number(process.env.ARCHIVE_MAX_ENTRIES           || 500),
+    archiveGcKeepSummaries: Number(process.env.ARCHIVE_GC_KEEP_SUMMARIES     || 20),
+  },
+  tracer: {
+    maxInMemory:       Number(process.env.TRACER_MAX_IN_MEMORY       || 200),
+    diskRetentionDays: Number(process.env.TRACER_DISK_RETENTION_DAYS || 30),
+  },
+  embedding: {
+    provider: process.env.EMBEDDING_PROVIDER || 'auto',
+  },
+  debug: {
+    token: process.env.DEBUG_TOKEN,
+  },
+  safety: {
+    extraRulesRaw: process.env.SAFETY_EXTRA_RULES || '',
+  },
+  approval: {
+    timeoutMs:     Number(process.env.APPROVAL_TIMEOUT_MS || 30_000),
+    extraRulesRaw: process.env.APPROVAL_EXTRA_RULES || '',
   },
 };
 

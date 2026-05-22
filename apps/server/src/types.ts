@@ -87,6 +87,12 @@ export interface ToolCtx {
   parentSpanId?: string;
   bus?: import('./core/messageBus.js').MessageBus;
   /**
+   * 当前 turn 所属的 session id。
+   * 由 conductor 在 toolRegistry.invoke(...) 时注入；sub-agent 通过 delegate 走时由 ctx 透传下来。
+   * hook 内（before:tool:call）用它实现 session-scoped 行为，如审批锁、SSE 路由。
+   */
+  sessionId?: string;
+  /**
    * 用户 stop / 服务 drain 时会触发 abort。
    * 工具应在长操作（fetch / 子进程 / 大文件读）开始前检查 signal.aborted；
    * 调用支持 AbortSignal 的 API（fetch / child_process）时直接把 signal 传过去。

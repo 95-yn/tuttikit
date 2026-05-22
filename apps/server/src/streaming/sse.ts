@@ -21,6 +21,14 @@ const EVENTS = [
   'plan:step:start',
   'plan:step:end',
   'plan:revised',
+  // 上下文压缩 / 召回（C+D）
+  'context:compacted',
+  'context:recalled',
+  // 安全拦截
+  'safety:denied',
+  // 动态审批
+  'permission:requested',
+  'permission:resolved',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

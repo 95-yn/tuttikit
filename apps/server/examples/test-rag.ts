@@ -14,8 +14,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { MockEmbedding, cosineSim } from '../src/llm/embedding.js';
-import { LongTermMemory } from '../src/memory/longTerm.js';
 import { rrfMerge } from '../src/memory/hybridSearch.js';
+import { setDBPath, closeDB, prepare } from '../src/core/db.js';
+
+// 每个 test file 一份独立 db，避免互相污染
+const _tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-test-db-'));
+setDBPath(path.join(_tmpDir, 'test.db'));
+const { LongTermMemory } = await import('../src/memory/longTerm.js');
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) { console.error(`✗ ${msg}`); process.exit(1); }
@@ -55,15 +60,14 @@ function assert(cond: unknown, msg: string): void {
 
 // ───── C. LongTermMemory 集成 ─────
 {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-test-'));
-  const file = path.join(tmpDir, 'lt.json');
-  const mem = new LongTermMemory({ filePath: file });
+  // 直接往 sqlite memory 表 INSERT 模拟"老数据"（无 vec）；不走 remember API
+  // 这是迁移到 sqlite 后最干净的"模拟未 backfill 老数据"的方式
+  prepare('DELETE FROM memory').run();
+  const ins = prepare('INSERT INTO memory (id, text, source, tags, vec, vec_model, created_at) VALUES (?, ?, ?, ?, NULL, NULL, ?)');
+  ins.run('old1', 'pgvector 是 Postgres 的向量扩展', 'manual', JSON.stringify(['db']), Date.now() - 86400000);
+  ins.run('old2', '小猫在睡觉', 'manual', JSON.stringify(['pet']), Date.now() - 86400000);
 
-  // 模拟老数据：手写 JSON，无 vec
-  fs.writeFileSync(file, JSON.stringify([
-    { id: 'old1', source: 'manual', text: 'pgvector 是 Postgres 的向量扩展', createdAt: Date.now() - 86400000, tags: ['db'] },
-    { id: 'old2', source: 'manual', text: '小猫在睡觉', createdAt: Date.now() - 86400000, tags: ['pet'] },
-  ]));
+  const mem = new LongTermMemory();
 
   // 老数据：关键词命中能搜出
   const r1 = mem.search('pgvector', 5);
@@ -88,27 +92,25 @@ function assert(cond: unknown, msg: string): void {
   // ensureEmbeddings backfill
   const back = await mem.ensureEmbeddings();
   assert(back.updated === 2, `backfill 更新 2 条老数据（实际 ${back.updated}）`);
-  const reloaded = JSON.parse(fs.readFileSync(file, 'utf-8')) as Array<{ id: string; vec?: number[] }>;
-  assert(reloaded.find((x) => x.id === 'old1')?.vec?.length === 384, '老数据 backfill 后带 vec');
-
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  // 直接查 sqlite 验证 vec 真的落盘
+  const row = prepare('SELECT vec FROM memory WHERE id = ?').get('old1') as { vec: string | null };
+  assert(row.vec !== null, '老数据 backfill 后带 vec（落盘到 sqlite）');
+  const reloadedVec = JSON.parse(row.vec!) as number[];
+  assert(reloadedVec.length === 384, `vec 维度 384（实际 ${reloadedVec.length}）`);
 }
 
 // ───── D-2. compact: stub LLM + stub embedding 合并 cluster ─────
-//   绕开 rememberAsync 的向量 dedup（>=0.95 会被合掉），直接把 entries 写盘后再 compact。
+//   绕开 rememberAsync 的向量 dedup（>=0.95 会被合掉），直接 INSERT 后再 compact。
 {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-compact-'));
-  const file = path.join(tmpDir, 'lt.json');
-
-  // 手写 4 条带 vec 的 entries：3 条同向量（cluster）+ 1 条不同（独立）
+  // 清空 + 直接 INSERT 4 条带 vec 的 entries
+  prepare('DELETE FROM memory').run();
   const groupVec = [1, 0, 0];
   const otherVec = [0, 1, 0];
-  fs.writeFileSync(file, JSON.stringify([
-    { id: 'a1', source: 'doc', text: 'I love cat A',         createdAt: Date.now() - 4000, vec: groupVec, vecModel: 'cluster-stub' },
-    { id: 'a2', source: 'doc', text: 'My cat B is fluffy',    createdAt: Date.now() - 3000, vec: groupVec, vecModel: 'cluster-stub' },
-    { id: 'a3', source: 'doc', text: 'Chocolate cake recipe', createdAt: Date.now() - 2000, vec: groupVec, vecModel: 'cluster-stub' },
-    { id: 'b1', source: 'doc', text: 'Totally unrelated note',createdAt: Date.now() - 1000, vec: otherVec, vecModel: 'cluster-stub' },
-  ]));
+  const ins = prepare('INSERT INTO memory (id, text, source, tags, vec, vec_model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  ins.run('a1', 'I love cat A',         'doc', '[]', JSON.stringify(groupVec), 'cluster-stub', Date.now() - 4000);
+  ins.run('a2', 'My cat B is fluffy',    'doc', '[]', JSON.stringify(groupVec), 'cluster-stub', Date.now() - 3000);
+  ins.run('a3', 'Chocolate cake recipe', 'doc', '[]', JSON.stringify(groupVec), 'cluster-stub', Date.now() - 2000);
+  ins.run('b1', 'Totally unrelated note','doc', '[]', JSON.stringify(otherVec), 'cluster-stub', Date.now() - 1000);
 
   class ClusterEmbedding {
     name = 'cluster-stub';
@@ -117,7 +119,7 @@ function assert(cond: unknown, msg: string): void {
       return texts.map((t) => /cat|cake/i.test(t) ? [...groupVec] : [...otherVec]);
     }
   }
-  const mem = new LongTermMemory({ filePath: file, maxEntries: 10, embedding: new ClusterEmbedding() as never });
+  const mem = new LongTermMemory({ maxEntries: 10, embedding: new ClusterEmbedding() as never });
 
   class StubLLM {
     name = 'stub-summarizer';
@@ -133,15 +135,12 @@ function assert(cond: unknown, msg: string): void {
   assert(after === before - 2, `4 条压缩到 2 条（before=${before}, after=${after}）`);
   assert(mem.all().some((it) => it.text.includes('【摘要】')), '能找到摘要条目');
   assert(mem.all().some((it) => it.text.includes('Totally unrelated')), '无关条目仍保留');
-
-  fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
 // ───── D. dedup + evict ─────
 {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-dedup-'));
-  const file = path.join(tmpDir, 'lt.json');
-  const mem = new LongTermMemory({ filePath: file, maxEntries: 3 });
+  prepare('DELETE FROM memory').run();
+  const mem = new LongTermMemory({ maxEntries: 3 });
 
   // exact dedup：同文本 remember 两次只剩一条
   const a1 = await mem.rememberAsync({ text: '完全相同的文本', source: 'a', tags: ['t1'] });
@@ -158,8 +157,6 @@ function assert(cond: unknown, msg: string): void {
   assert(mem.all().length === 3, 'evict 后还是 3 条（最老的被丢）');
   const ids = mem.all().map((it) => it.id);
   assert(ids.includes(fourth.id), '第四条还在');
-
-  fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
 // ───── E. VectorStore 接口（InMemory 实现） ─────
@@ -185,4 +182,6 @@ function assert(cond: unknown, msg: string): void {
   assert(caught instanceof Error && /dim mismatch/.test((caught as Error).message), 'VectorStore: dim 不一致抛错');
 }
 
+closeDB();
+fs.rmSync(_tmpDir, { recursive: true, force: true });
 console.log('\n全部通过 ✅');

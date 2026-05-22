@@ -5,7 +5,11 @@ import { budgetGuard, BudgetExceededError } from '../core/budget.js';
 import { drainer } from '../core/drain.js';
 import { config } from '../config.js';
 import { SELF_CRITIQUE_PROMPT } from '../prompts/selfCritique.js';
-import { planTask, renderPlanForConductor, revisePlan, shouldPlan, type Plan } from './planner.js';
+import { planTask, renderPlanForConductor, shouldPlan, type Plan } from './planner.js';
+import { planExecuteSteps } from './planExecute.js';
+import { compactIfNeeded, persistCompact, recallRelevant, formatRecalled } from '../core/sessionCompact.js';
+import { contextWindowOf } from '../llm/contextWindow.js';
+import { redactSecrets } from '../core/redact.js';
 import type { Logger } from 'pino';
 import type {
   LLMLike, Message, Usage, Attachment,
@@ -103,10 +107,50 @@ export class ConductorAgent {
 
     drainer.enter();
 
+    // ────── 上下文管理（C+D） ──────
+    // C: 估算当前 session 是否要压缩，超阈值就把老消息批量摘要 + 全文进 archive
+    // D: 把当前 user query 拿去 archive 做 RAG 召回，相关历史片段拼回 system prompt
+    //   两者都跑在 plan / react 之前，让后续走压缩后的 session
+    let recalledBlock = '';
+    try {
+      const modelForCtx = (this.llm as { model?: { modelId?: string } }).model?.modelId
+        || (config.llm as unknown as Record<string, { model?: string }>)[this.llm.name]?.model
+        || this.llm.name;
+      const ctxWindow = contextWindowOf(this.llm.name, modelForCtx);
+      const result = await compactIfNeeded({
+        sessionId, contextWindow: ctxWindow, llm: this.llm,
+      });
+      if (result.triggered) {
+        await persistCompact(sessionId, result);
+        this.bus?.emit('context:compacted', {
+          sessionId,
+          beforeTokens: result.beforeTokens,
+          afterTokens: result.afterTokens,
+          archivedCount: result.archivedCount,
+          summariesCreated: result.summariesCreated,
+          ratio: ctxWindow > 0 ? result.beforeTokens / ctxWindow : 0,
+        });
+        this.logger.info(
+          { sessionId, beforeTokens: result.beforeTokens, afterTokens: result.afterTokens, archived: result.archivedCount },
+          '[compact] 触发上下文压缩',
+        );
+      }
+      // RAG 召回（archive 非空时才有意义）
+      const recalled = await recallRelevant({ sessionId, query: userMessage });
+      if (recalled.length > 0) {
+        recalledBlock = '\n\n' + formatRecalled(recalled);
+        this.bus?.emit('context:recalled', { sessionId, count: recalled.length });
+      }
+    } catch (err) {
+      // compact / recall 任一失败都不应该让对话挂掉；记 warn 让对话继续走原始 messages
+      this.logger.warn({ err: (err as Error).message }, '[compact/recall] 失败，跳过');
+    }
+
     // Plan-and-Execute V1：先调 planner 拿 steps，把计划渲染进 system，让 ReAct 按计划走。
     // 启发式（shouldPlan）过滤短任务，避免每个 "你好" 都烧一次 planner。
     let plan: Plan | null = null;
-    let augmentedSystem = this.systemPrompt;
+    // 注意：recalledBlock 拼在 system prompt **尾部**，前缀部分保持稳定让 Anthropic prompt cache 命中（Manus / Claude Code 经验）
+    let augmentedSystem = this.systemPrompt + recalledBlock;
     if (config.agent.planAndExecute && shouldPlan(userMessage)) {
       const planSpan = tracer.startSpan(trace, 'llm', 'conductor.plan', { parentId: span.spanId });
       try {
@@ -128,14 +172,23 @@ export class ConductorAgent {
     try {
       // V2 显式步骤模式 vs V1 plan-aware ReAct 一次跑完
       if (plan && config.agent.planExplicitSteps) {
-        // V2：逐步执行 + emit plan:step:start/end
-        await this._planExecuteSteps({
-          plan, sessionId, augmentedSystem: this.systemPrompt,   // 注意：V2 不注入 plan 进 system（避免重复指引）
-          tools, span, trace, tracer, stream,
-          totalUsage, stepCounter,
-          userMessage,
-          signal: ac.signal,
-        });
+        // V2 逻辑抽到 agents/planExecute.ts；conductor 注入 _runReactSteps 作为回调
+        await planExecuteSteps(
+          {
+            llm: this.llm,
+            sessionManager: this.sessionManager,
+            bus: this.bus,
+            logger: this.logger,
+            runReactSteps: (a) => this._runReactSteps(a),
+          },
+          {
+            plan, sessionId, augmentedSystem: this.systemPrompt + recalledBlock,   // V2 不注入 plan 进 system
+            tools, span, trace, tracer, stream,
+            totalUsage, stepCounter,
+            userMessage,
+            signal: ac.signal,
+          },
+        );
       } else {
         // V1 / 无 plan：原始 while-loop（含 self-critique）
         await this._runReactSteps({
@@ -293,25 +346,39 @@ export class ConductorAgent {
         });
         let toolContent: string;
         try {
+          // hook 现在统一在 ToolRegistry.invoke 内部跑（让 sub-agent 路径也受保护）。
+          // 命中 deny 会抛 SafetyDeniedError，下面 catch 转结构化 tool_result 给 LLM。
           const result = await this.toolRegistry.invoke(call.name, call.input, {
             agent: this.name, trace, tracer,
             parentSpanId: toolSpan.spanId,
             bus: this.bus,
             signal,
+            sessionId,
           });
           tracer.endSpan(trace, toolSpan, { output: truncate(result) });
           this.bus?.emit('tool:end', { sessionId, toolCallId: call.id, name: call.name, result });
           toolContent = JSON.stringify(result);
         } catch (err) {
           const e = err as Error;
+          const errObj = err as { name?: string; toLLMPayload?: () => unknown; ruleName?: string; denyReason?: string };
           tracer.endSpan(trace, toolSpan, { status: 'error', error: err });
-          this.bus?.emit('tool:error', {
-            sessionId, toolCallId: call.id, name: call.name, error: e.message,
-          });
-          const inputErr = err as { name?: string; toLLMPayload?: () => unknown };
-          if (inputErr?.name === 'ToolInputError' && typeof inputErr.toLLMPayload === 'function') {
-            toolContent = JSON.stringify(inputErr.toLLMPayload());
+          // 区分三种错误：safety 拦截 / 输入校验失败 / 其他运行时错
+          if (errObj?.name === 'SafetyDeniedError') {
+            this.bus?.emit('safety:denied', {
+              sessionId, toolCallId: call.id, name: call.name,
+              rule: errObj.ruleName, reason: errObj.denyReason,
+              input: redactSecrets(call.input),
+            });
+            this.logger.warn(
+              { sessionId, tool: call.name, rule: errObj.ruleName },
+              '[safety] 拦截危险 tool call',
+            );
+            toolContent = JSON.stringify(errObj.toLLMPayload!());
+          } else if (errObj?.name === 'ToolInputError' && typeof errObj.toLLMPayload === 'function') {
+            this.bus?.emit('tool:error', { sessionId, toolCallId: call.id, name: call.name, error: e.message });
+            toolContent = JSON.stringify(errObj.toLLMPayload());
           } else {
+            this.bus?.emit('tool:error', { sessionId, toolCallId: call.id, name: call.name, error: e.message });
             toolContent = JSON.stringify({ error: e.message });
           }
         }
@@ -327,155 +394,6 @@ export class ConductorAgent {
     return { finalContent };
   }
 
-  /**
-   * V2 Plan-Execute：把 plan 拆成单独 user 注入，逐步跑 ReAct + emit 步骤事件。
-   * 每个 step 最多吃 4 步 inner ReAct；最后跑一次聚合让 LLM 给最终汇总。
-   */
-  private async _planExecuteSteps(args: {
-    plan: Plan;
-    sessionId: string;
-    augmentedSystem: string;
-    tools: ReturnType<ToolRegistry['specsFor']>;
-    span: Span;
-    trace: Trace;
-    tracer: Tracer;
-    stream: boolean;
-    totalUsage: Usage;
-    stepCounter: { value: number };
-    userMessage: string;
-    signal?: AbortSignal;
-  }): Promise<void> {
-    const PER_STEP_MAX = 4;
-    const stepResults: Array<{ id: string; ok: boolean; output: string }> = [];
-    let pendingSteps = [...args.plan.steps];          // 队列：可以被 re-plan 替换
-    let revised = false;                              // 一次 turn 只允许 re-plan 一次
-
-    while (pendingSteps.length > 0) {
-      const step = pendingSteps.shift()!;
-      const stepStartedAt = Date.now();
-      this.bus?.emit('plan:step:start', {
-        sessionId: args.sessionId,
-        stepId: step.id,
-        description: step.description,
-      });
-      const stepSpan = args.tracer.startSpan(args.trace, 'agent', `plan.step[${step.id}]`, {
-        parentId: args.span.spanId,
-        description: step.description,
-      });
-      // 给 LLM 注入「执行这一步」的 user 指令
-      await this.sessionManager.appendMessage(args.sessionId, {
-        role: 'user',
-        content:
-          `[执行计划 ${step.id}] ${step.description}` +
-          (step.success_criteria ? `\n验收：${step.success_criteria}` : ''),
-        meta: { createdAt: Date.now(), planStep: step.id },
-      });
-
-      let stepOk = true;
-      let stepContent = '';
-      let stepError = '';
-      try {
-        const r = await this._runReactSteps({
-          sessionId: args.sessionId,
-          augmentedSystem: args.augmentedSystem,
-          tools: args.tools,
-          span: args.span,
-          trace: args.trace,
-          tracer: args.tracer,
-          stream: args.stream,
-          totalUsage: args.totalUsage,
-          stepCounter: args.stepCounter,
-          maxSteps: PER_STEP_MAX,
-          userMessage: step.description,
-          allowCritique: false,                   // 单步内不 critique
-          critiqueDoneRef: { value: true },
-          signal: args.signal,
-        });
-        stepContent = r.finalContent;
-      } catch (err) {
-        stepOk = false;
-        stepError = (err as Error).message;
-        stepContent = `(step 失败：${stepError})`;
-      }
-      args.tracer.endSpan(args.trace, stepSpan, {
-        status: stepOk ? 'ok' : 'error',
-        output: stepContent?.slice(0, 200),
-      });
-      this.bus?.emit('plan:step:end', {
-        sessionId: args.sessionId,
-        stepId: step.id,
-        ok: stepOk,
-        durationMs: Date.now() - stepStartedAt,
-        finalContent: stepContent?.slice(0, 600),
-      });
-      stepResults.push({ id: step.id, ok: stepOk, output: stepContent });
-
-      // 失败 → 一次 re-plan 机会
-      if (!stepOk) {
-        if (revised) {
-          this.logger.warn({ stepId: step.id }, '[plan] 已经 re-plan 过一次，本次失败不再重试');
-          break;
-        }
-        revised = true;
-        this.logger.info({ stepId: step.id, error: stepError }, '[plan] step 失败，尝试 re-plan 剩余步骤');
-        const replanSpan = args.tracer.startSpan(args.trace, 'llm', 'conductor.replan', { parentId: args.span.spanId });
-        try {
-          const revisedPlan = await revisePlan(this.llm, {
-            userMessage: args.userMessage,
-            failedStepId: step.id,
-            failureReason: stepError || stepContent.slice(0, 200),
-            completedSteps: stepResults
-              .filter((r) => r.ok)
-              .map((r) => ({ id: r.id, description: '', outputDigest: r.output.slice(0, 80) })),
-            remainingSteps: pendingSteps,
-          });
-          args.tracer.endSpan(args.trace, replanSpan, {
-            output: revisedPlan ? `${revisedPlan.steps.length} new steps` : 'null',
-          });
-          if (revisedPlan) {
-            this.bus?.emit('plan:revised', {
-              sessionId: args.sessionId,
-              reason: stepError || stepContent.slice(0, 200),
-              failedStepId: step.id,
-              newSteps: revisedPlan.steps,
-            });
-            // 替换剩余队列，重新跑
-            pendingSteps = revisedPlan.steps;
-            continue;
-          }
-          // 修订失败 → 保守停止
-          break;
-        } catch (err) {
-          args.tracer.endSpan(args.trace, replanSpan, { status: 'error', error: err });
-          break;
-        }
-      }
-    }
-
-    // 最后聚合：把所有 step 结果摆给 LLM，让它给最终答复
-    const summary = stepResults.map((r) => `- ${r.id} (${r.ok ? 'ok' : 'fail'}): ${r.output.slice(0, 200)}`).join('\n');
-    await this.sessionManager.appendMessage(args.sessionId, {
-      role: 'user',
-      content: `[计划执行完成] 各步骤结果如下，请给出最终汇总答复（不要再调工具）：\n${summary}`,
-      meta: { createdAt: Date.now(), planSynth: true },
-    });
-    await this._runReactSteps({
-      sessionId: args.sessionId,
-      augmentedSystem: args.augmentedSystem,
-      tools: args.tools,
-      span: args.span,
-      trace: args.trace,
-      tracer: args.tracer,
-      stream: args.stream,
-      totalUsage: args.totalUsage,
-      stepCounter: args.stepCounter,
-      maxSteps: 2,
-      userMessage: args.userMessage,
-      allowCritique: false,
-      critiqueDoneRef: { value: true },
-      signal: args.signal,
-    });
-  }
 
   /**
    * 扫 trace 找写代码文件的 file_system_write 调用，返回相对路径列表。

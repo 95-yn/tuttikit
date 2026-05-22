@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { MessageBubble } from '@/components/MessageBubble';
 import { ToastModalHost, showConfirm, showToast } from '@/components/ToastModalHost';
 import { ChatNotices } from '@/components/ChatNotices';
+import { PendingApprovalPanel } from '@/components/PendingApprovalPanel';
 import { QrFab } from '@/components/QrFab';
 import { CommandPalette } from '@/components/CommandPalette';
 import { DebugPanel } from '@/components/DebugPanel';
@@ -342,6 +343,7 @@ export default function ChatPage() {
       <DebugPanel />
       <ToastModalHost />
       <ChatNotices notices={chat.notices} onDismiss={chat.dismissNotice} />
+      <PendingApprovalPanel pending={chat.pendingApproval} onAnswer={chat.answerPermission} />
     </>
   );
 }

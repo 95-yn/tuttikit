@@ -640,6 +640,100 @@ body {
 .chat-notice-review   { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 .chat-notice-critique { border-color: color-mix(in srgb, var(--muted-2) 50%, transparent); }
 .chat-notice-plan     { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.chat-notice-compact  { border-color: color-mix(in srgb, var(--muted-2) 50%, transparent); }
+.chat-notice-recall   { border-color: color-mix(in srgb, var(--muted-2) 50%, transparent); }
+/* 安全拦截：醒目红色 + 半透明红底，区别于其他通知 */
+.chat-notice-safety   {
+  border-color: color-mix(in srgb, var(--error, #ef4444) 80%, transparent);
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, var(--panel, #0f1117));
+  color: color-mix(in srgb, var(--error, #ef4444) 90%, var(--text));
+  font-weight: 500;
+}
+
+/* ───── 动态审批面板 ───── */
+.approval-panel {
+  position: sticky;
+  top: 12px;
+  z-index: 50;
+  margin: 8px 0 16px;
+  padding: 14px 16px;
+  border: 1.5px solid color-mix(in srgb, var(--warn, #f59e0b) 70%, transparent);
+  background: color-mix(in srgb, var(--warn, #f59e0b) 10%, var(--panel, #0f1117));
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(245, 158, 11, 0.18);
+  animation: chat-notice-in .2s ease;
+}
+.approval-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600;
+  color: color-mix(in srgb, var(--warn, #f59e0b) 80%, var(--text));
+}
+.approval-icon { font-size: 18px; }
+.approval-title { flex: 1; }
+.approval-title code {
+  background: color-mix(in srgb, var(--warn, #f59e0b) 16%, transparent);
+  padding: 1px 5px; border-radius: 4px;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+}
+.approval-timer {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn, #f59e0b) 22%, transparent);
+}
+.approval-reason {
+  margin: 8px 0 4px;
+  font-size: 13px;
+  color: var(--text-dim, #b3b8c2);
+  line-height: 1.5;
+}
+.approval-details {
+  margin: 8px 0;
+}
+.approval-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted-2, #707783);
+  user-select: none;
+}
+.approval-input {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.18);
+  border-radius: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim, #b3b8c2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.approval-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 12px;
+}
+.approval-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: filter .12s ease, transform .12s ease;
+}
+.approval-btn:hover { filter: brightness(1.1); }
+.approval-btn:active { transform: scale(0.97); }
+.approval-btn-deny {
+  background: color-mix(in srgb, var(--muted-2, #707783) 20%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--muted-2, #707783) 40%, transparent);
+}
+.approval-btn-allow {
+  background: var(--accent, #4d7cff);
+  color: white;
+  border-color: var(--accent, #4d7cff);
+}
 .chat-notice .x {
   margin-left: auto;
   background: none; border: none; color: var(--muted-2);

@@ -18,6 +18,7 @@ export interface SubAgentLike {
     tracer: Tracer;
     parentSpanId?: string | null;
     stream?: boolean;
+    sessionId?: string;
   }) => Promise<{ content: string; usage: { inputTokens?: number; outputTokens?: number } }>;
 }
 
@@ -68,7 +69,7 @@ export function makeDelegateTool({
     allowedAgents: [],
     handler: async ({ goal, context }, ctx: ToolCtx = {}) => {
       const input = context ? `${goal}\n\n参考背景：\n${context}` : goal;
-      const { trace, tracer, parentSpanId, bus } = ctx;
+      const { trace, tracer, parentSpanId, bus, sessionId } = ctx;
       if (!trace || !tracer) throw new Error('delegate tool 需要 trace/tracer 上下文');
       const result = await agent.run({
         input,
@@ -76,6 +77,7 @@ export function makeDelegateTool({
         tracer: tracer as Tracer,
         parentSpanId: (parentSpanId ?? null) as string | null,
         stream: false,
+        sessionId,    // 透传到 sub-agent → 它的 tool invoke ctx → hook 能识别 session
       });
 
       if (longTermMemory && persistTagFn) {

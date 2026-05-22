@@ -24,7 +24,7 @@ export interface PlanStepNoticeItem {
 
 export interface ChatNotice {
   id: string;
-  kind: 'critique' | 'review' | 'budget' | 'plan';
+  kind: 'critique' | 'review' | 'budget' | 'plan' | 'compact' | 'recall' | 'safety';
   /** 触发时间，前端可自动 5-10s 后淡出 */
   at: number;
   text: string;
@@ -39,6 +39,16 @@ export interface ChatNotice {
   revisedReason?: string;
 }
 
+export interface PendingApprovalUI {
+  requestId: string;
+  toolName: string;
+  rule: string;
+  reason: string;
+  input: unknown;
+  timeoutMs: number;
+  createdAt: number;
+}
+
 export interface UseChatState {
   bubbles: BubbleData[];
   busy: boolean;
@@ -49,6 +59,8 @@ export interface UseChatState {
   stop: () => void;
   loadFromSession: (s: Session) => Promise<void>;
   reset: () => void;
+  pendingApproval: PendingApprovalUI | null;
+  answerPermission: (allow: boolean) => Promise<void>;
 }
 
 let _bubbleSeq = 0;
@@ -62,6 +74,7 @@ export function useChat(sessionId: string | null): UseChatState {
     sessionUSD: 0, budgetWarn: null,
   });
   const [notices, setNotices] = useState<ChatNotice[]>([]);
+  const [pendingApproval, setPendingApproval] = useState<PendingApprovalUI | null>(null);
 
   const pushNotice = useCallback((n: Omit<ChatNotice, 'id' | 'at'>) => {
     const id = `notice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -198,6 +211,20 @@ export function useChat(sessionId: string | null): UseChatState {
       const stats = await api.getSessionBudget(session.id);
       if (stats.totalUSD > 0) {
         setCtxUsage((u) => ({ ...u, sessionUSD: stats.totalUSD }));
+      }
+    } catch {/* ignore */}
+    // reconnect 时同步当前 session 是否有 pending 审批（之前已发出但前端断连了）
+    try {
+      const { pending: list } = await api.listPendingPermissions(session.id);
+      if (list.length > 0) {
+        const p = list[0];   // 后端保证同 session 同时最多 1 个
+        setPendingApproval({
+          requestId: p.id, toolName: p.toolName, rule: p.rule,
+          reason: p.reason, input: p.input,
+          timeoutMs: p.timeoutMs, createdAt: p.createdAt,
+        });
+      } else {
+        setPendingApproval(null);   // 切换 session 时清空旧 session 的 pending
       }
     } catch {/* ignore */}
   }, []);
@@ -351,6 +378,75 @@ export function useChat(sessionId: string | null): UseChatState {
       } catch {/* ignore */}
     });
 
+    es.addEventListener('context:compacted', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          beforeTokens: number; afterTokens: number;
+          archivedCount: number; summariesCreated: number; ratio: number;
+        };
+        const saved = data.beforeTokens - data.afterTokens;
+        const pct = data.beforeTokens > 0 ? Math.round((saved / data.beforeTokens) * 100) : 0;
+        pushNotice({
+          kind: 'compact',
+          text: `上下文已自动压缩：${data.archivedCount} 条老消息合成 ${data.summariesCreated} 段摘要，省下 ${pct}% 的 token（约 ${saved.toLocaleString()}）`,
+        });
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('context:recalled', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { count: number };
+        pushNotice({
+          kind: 'recall',
+          text: `从历史中召回了 ${data.count} 条相关片段作为参考`,
+        });
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('permission:requested', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          requestId: string; toolName: string; rule: string; reason: string;
+          input: unknown; timeoutMs: number; createdAt: number;
+        };
+        setPendingApproval({
+          requestId: data.requestId, toolName: data.toolName, rule: data.rule,
+          reason: data.reason, input: data.input,
+          timeoutMs: data.timeoutMs, createdAt: data.createdAt,
+        });
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('permission:resolved', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          requestId: string; allow: boolean; source: 'user' | 'timeout' | 'cancel';
+        };
+        // resolved 一律清空 pending（无论是用户操作的还是超时/取消）
+        setPendingApproval((cur) => (cur?.requestId === data.requestId ? null : cur));
+        // 区分三种 resolve 来源
+        if (data.source === 'timeout') {
+          pushNotice({ kind: 'safety', text: '⏱ 审批超时，自动拒绝', sticky: false });
+        } else if (data.source === 'cancel') {
+          pushNotice({ kind: 'safety', text: '⏹ 对话被中断，审批已取消', sticky: false });
+        }
+        // source === 'user' 时不弹 toast——用户刚刚自己点的按钮，已经知道结果
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('safety:denied', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          name: string; rule: string; reason: string;
+        };
+        pushNotice({
+          kind: 'safety',
+          text: `🚫 拦截危险操作：${data.name} 被规则 [${data.rule}] 阻止 — ${data.reason}`,
+          sticky: true,   // 安全事件不自动消失，让用户主动点掉
+        });
+      } catch {/* ignore */}
+    });
+
     es.addEventListener('critique:revise', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data) as { critique: string };
@@ -450,5 +546,22 @@ export function useChat(sessionId: string | null): UseChatState {
     es.onerror = () => stop();
   }, [sessionId, busy, stop]);
 
-  return { bubbles, busy, ctxUsage, notices, dismissNotice, send, stop, loadFromSession, reset };
+  const answerPermission = useCallback(async (allow: boolean): Promise<void> => {
+    if (!sessionId || !pendingApproval) return;
+    const reqId = pendingApproval.requestId;
+    // 乐观更新：先清 UI，后端 resolved 事件也会再清一次（幂等）
+    setPendingApproval(null);
+    try {
+      await api.answerPermission(sessionId, reqId, allow);
+    } catch (err) {
+      // 网络异常：把 pending 放回去让用户再点
+      console.error('[answerPermission] 网络异常', err);
+    }
+  }, [sessionId, pendingApproval]);
+
+  return {
+    bubbles, busy, ctxUsage, notices, dismissNotice,
+    send, stop, loadFromSession, reset,
+    pendingApproval, answerPermission,
+  };
 }

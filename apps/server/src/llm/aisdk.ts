@@ -1,4 +1,20 @@
 import { generateText, streamText, jsonSchema } from 'ai';
+
+/**
+ * ===== 关于本文件里的 `as never` 类型断言 =====
+ *
+ * `aisdk.ts` 是 LLMLike 抽象层 → Vercel AI SDK 具体类型的**翻译边界**。
+ * 我们故意不把 AI SDK 的 `ModelMessage` / `LanguageModel` / `ToolSet` 暴露到 LLMLike 接口外部，
+ * 这样 AI SDK 升级（v5 → v6）破坏类型时，不会冒泡到 conductor / 工具层——只有这一个文件要改。
+ *
+ * 代价就是边界处的 9 处 `as never`：
+ *   - 我们的 Message → AI SDK ModelMessage（_toModelMessages 输出已经手工保证形状对，TS 推不出来）
+ *   - this.model → AI SDK LanguageModel（model handle 来自 @ai-sdk/* 子包，签名跨 SDK 版本变）
+ *   - this._toAITools(tools) → AI SDK ToolSet（同上）
+ *   - result.toolCalls → 我们的 ToolCall（_normToolCalls 内部 unwrap）
+ *
+ * 不收敛到 wrapper 函数——wrapper 内部仍要 cast，只是搬位置。直接在调用点写明意图更直白。
+ */
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';

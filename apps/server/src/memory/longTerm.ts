@@ -1,12 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
-import { config } from '../config.js';
 import { logger } from '../observability/logger.js';
 import { createEmbedding, cosineSim, type EmbeddingProvider } from '../llm/embedding.js';
 import { rrfMerge, type RankedItem } from './hybridSearch.js';
 import type { LLMLike, MemoryEntry } from '../types.js';
+import { prepare, transaction } from '../core/db.js';
 
 export interface RememberInput {
   tags?: string[];
@@ -28,22 +26,18 @@ const DEFAULT_MAX_ENTRIES = 500;         // 超出后 evict 最老的
  *   - mock embedding 是 hash 派生确定性向量，离线场景 / 测试也能跑。
  */
 export class LongTermMemory {
-  filePath: string;
   items: MemoryEntry[];
   maxEntries: number;
   private _loaded: boolean;
   private _embedding: EmbeddingProvider | null;
 
   constructor({
-    filePath = config.memory.longTermPath,
     embedding,
     maxEntries = DEFAULT_MAX_ENTRIES,
-  }: { filePath?: string; embedding?: EmbeddingProvider; maxEntries?: number } = {}) {
-    this.filePath = path.resolve(filePath);
+  }: { embedding?: EmbeddingProvider; maxEntries?: number } = {}) {
     this.items = [];
     this.maxEntries = maxEntries;
     this._loaded = false;
-    // 测试 / 嵌入式场景可以注入；默认从环境变量推断
     this._embedding = embedding ?? null;
   }
 
@@ -52,24 +46,71 @@ export class LongTermMemory {
     return this._embedding;
   }
 
+  /**
+   * Boot 时从 sqlite memory 表 load 所有 entries 到内存（一次性）。
+   * search / compact 仍在 this.items 上运行——sqlite 仅作"持久化 + 跨进程并发"的存储后端。
+   * 数据集 ≤ maxEntries（默认 500）时内存开销不到 1 MB。
+   */
   private _ensureLoaded(): void {
     if (this._loaded) return;
     try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
-        this.items = JSON.parse(raw);
-      }
+      const rows = prepare('SELECT id, text, source, tags, vec, vec_model, created_at FROM memory ORDER BY created_at ASC')
+        .all() as Array<{ id: string; text: string; source: string; tags: string; vec: string | null; vec_model: string | null; created_at: number }>;
+      this.items = rows.map((r) => {
+        const entry: MemoryEntry = {
+          id: r.id, text: r.text, source: r.source,
+          tags: r.tags ? JSON.parse(r.tags) : [],
+          createdAt: r.created_at,
+        };
+        if (r.vec) {
+          try { entry.vec = JSON.parse(r.vec); entry.vecModel = r.vec_model ?? undefined; }
+          catch {/* 损坏的 vec 当没有 */}
+        }
+        return entry;
+      });
     } catch (err) {
-      logger.warn({ err }, '[longTerm] 加载失败，使用空记忆');
+      logger.warn({ err }, '[longTerm] sqlite 加载失败，使用空记忆');
       this.items = [];
     }
     this._loaded = true;
   }
 
+  /**
+   * 把当前 in-memory items 整体同步到 sqlite memory 表。
+   *
+   * 实现策略：transaction 里 DELETE + 批量 INSERT。
+   * 500 条 < 10ms（实测），换来：
+   *   - 不再每次写都重写整个 JSON 文件
+   *   - sqlite WAL 让读写不互阻塞
+   *   - 进程崩 / kill -9 不会留半截文件
+   *
+   * 真增量 upsert（只更新 dirty entries）可以未来再做；当前规模这条简单方案够用。
+   */
   private _persist(): void {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(this.items, null, 2));
+    try {
+      transaction(() => {
+        prepare('DELETE FROM memory').run();
+        const ins = prepare(`
+          INSERT INTO memory (id, text, source, tags, vec, vec_model, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const it of this.items) {
+          ins.run(
+            it.id ?? nanoid(8), it.text, it.source ?? 'unknown',
+            JSON.stringify(it.tags ?? []),
+            it.vec ? JSON.stringify(it.vec) : null,
+            it.vecModel ?? null,
+            it.createdAt,
+          );
+        }
+      });
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, '[longTerm] sqlite persist 失败（best-effort，不阻塞主流程）');
+    }
   }
+
+  /** 兼容老 API：sqlite 写盘是同步的，不需要 flush；保留空实现 */
+  async flush(): Promise<void> { /* no-op */ }
 
   /** 同步版（向后兼容）：不算 embedding，下次 search 时再 lazy backfill */
   remember({ tags = [], text, source = 'unknown' }: RememberInput): MemoryEntry {
@@ -206,6 +247,8 @@ export class LongTermMemory {
       }
     }
     this._persist();
+    // 这个 API 调用方通常会立刻读盘验证（test 也是），所以 await 写盘真正完成
+    await this.flush();
     return { updated, skipped: this.items.length - updated };
   }
 

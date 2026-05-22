@@ -14,6 +14,9 @@ const ICON: Record<ChatNotice['kind'], string> = {
   review: '🔍',
   critique: '🪞',
   plan: '🗂',
+  compact: '🗜',
+  recall: '🔎',
+  safety: '🛑',
 };
 
 /** 顶部浮层通知条：budget / review / critique / plan */

@@ -5,13 +5,46 @@ import { FallbackLLM } from './fallback.js';
 import type { LLMLike } from '../types.js';
 
 /**
+ * LLM 实例缓存（P1 优化）：
+ *   - 每个 turn 都 new AISDKProvider / FallbackLLM 是浪费——model handle 内部含 auth header、
+ *     fetch agent、连接池等
+ *   - 按 cacheKey（provider 名 + fallback 链 hash）缓存复用
+ *   - LLMLike 是只读接口（无 per-turn 状态），跨 turn 共享是安全的
+ *   - 配置在运行时不变（来自 config.ts），缓存生命周期 = 进程生命周期
+ */
+const _llmCache = new Map<string, LLMLike>();
+
+function _cacheKeyFor(providerName?: string): string {
+  if (providerName) return `single:${providerName}`;
+  const primary = config.llm.provider;
+  const alts = config.llm.fallbackChain.filter((n) => n !== primary).join(',');
+  return `chain:${primary}|${alts}`;
+}
+
+/**
  * 创建一个 LLM 实例。
  *   - 若提供了 providerName → 单一 provider（不走 fallback chain），失败照旧降到 mock。
  *   - 不传 providerName → 主 provider 由 config.llm.provider 决定；
  *     若同时配置了 config.llm.fallbackChain 且至少有一个可用项，
  *     返回 FallbackLLM 包装：限流/5xx 时按链上顺序切到下一个。
+ *
+ * 内部走 cacheKey 缓存：同样 (providerName, fallbackChain) 复用同一个实例。
  */
 export function createLLM(providerName?: string): LLMLike {
+  const key = _cacheKeyFor(providerName);
+  const cached = _llmCache.get(key);
+  if (cached) return cached;
+  const fresh = _build(providerName);
+  _llmCache.set(key, fresh);
+  return fresh;
+}
+
+/** 测试用：清缓存让下次 createLLM 走全新实例（比如改了 config 后） */
+export function clearLLMCache(): void {
+  _llmCache.clear();
+}
+
+function _build(providerName?: string): LLMLike {
   if (providerName) return _createSingle(providerName);
 
   const primary = _createSingle(config.llm.provider);

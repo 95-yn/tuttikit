@@ -23,11 +23,19 @@ const WRITE_ALLOWLIST: string[] = (process.env.FS_WRITE_ALLOWLIST || 'data,tmp,o
 /**
  * 写入拒绝列表：即便它落在 allowlist 里也禁止（safety net）。
  * 路径以 POSIX 风格匹配，相对 ROOT。
+ *
+ * 默认列表覆盖最常见的"千万别写"路径；用户可通过 env 追加（不覆盖默认，仅 append）：
+ *   FS_WRITE_DENYLIST_EXTRA=secrets/,credentials.json
  */
-const WRITE_DENYLIST: string[] = [
+const WRITE_DENYLIST_DEFAULT: string[] = [
   '.env', '.env.local', '.env.production',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
   '.git', '.github', 'node_modules', '.mcp.json',
+];
+const WRITE_DENYLIST: string[] = [
+  ...WRITE_DENYLIST_DEFAULT,
+  ...(process.env.FS_WRITE_DENYLIST_EXTRA || '')
+    .split(',').map((s) => s.trim().replace(/^\/+|\/+$/g, '')).filter(Boolean),
 ];
 
 // 用 path.relative 做越界检查：在大小写不敏感的文件系统上（macOS HFS+/APFS、Windows NTFS），
