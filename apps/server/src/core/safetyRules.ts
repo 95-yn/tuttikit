@@ -124,6 +124,29 @@ export const DEFAULT_DANGER_RULES: DangerRule[] = [
   // ── git 破坏性操作 ──
   // 注：常规 git reset --hard / git push --force 在工程里偶尔合法，所以不放在内置黑名单里。
   // 真要拦应走显式审批 hook，而不是内置硬拦。
+
+  // ── Python 沙箱越权（code_execute tool） ──
+  // Pyodide 默认无 os / subprocess，但 LLM 真写出来浪费 token，先 deny + 给清晰 reason
+  {
+    name: 'python-os-system',
+    reason: 'Python 代码不允许调 os.system / subprocess —— Pyodide-in-Node 实际能透传到宿主文件系统，os.system 等价于真 shell。如要跑 shell 改用 fileSystem 工具。',
+    // 注意：不用 \b / 不用前缀检查。原因：input 通常被 JSON.stringify 后才匹配，
+    // \n 变成字面 `\n`（反斜杠 + n），n 是 word char 让 \b 和 [^a-zA-Z0-9_] 前缀检查全部失效。
+    // 直接匹配整个字符串里的 `os.system(`，接受 `foo.os.system(` 这种罕见的误命中。
+    pattern: /os\.system\s*\(|subprocess\.(?:run|call|Popen|check_(?:call|output))\s*\(|os\.popen\s*\(/,
+  },
+  {
+    name: 'python-eval-exec',
+    reason: 'Python eval() / exec() / compile() 在沙箱里仍能拼出恶意调用；请直接写代码而不是动态拼字符串。',
+    // 同上，简化前缀检查。注意 `\beval` / `\bexec` 仍能命中 `myexec(`，故要求紧跟 `(` 而不是 word char
+    pattern: /(?:^|[^a-zA-Z0-9_.])(?:eval|exec|compile)\s*\(/m,
+  },
+  {
+    name: 'python-import-dangerous',
+    reason: 'Python __import__("os") / __import__("subprocess") 是动态导入危险模块的常见绕过手法。',
+    // 注意：JSON.stringify input 后 `"` 变 `\"`；要兼容字面引号 + 转义引号，前后允许 \\?["']
+    pattern: /__import__\s*\(\s*\\?["'](?:os|subprocess|ctypes|sys)\\?["']/,
+  },
 ];
 
 /**

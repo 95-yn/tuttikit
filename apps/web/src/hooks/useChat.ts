@@ -328,6 +328,40 @@ export function useChat(sessionId: string | null): UseChatState {
       );
     });
 
+    es.addEventListener('code:image', (e) => {
+      try {
+        const { imageBase64 } = JSON.parse((e as MessageEvent).data) as {
+          sessionId: string; imageBase64: string; mediaType: 'image/png';
+        };
+        if (!imageBase64) return;
+        setBubbles((arr) => {
+          // 找最近一条 assistant；再在它的 tools 里找最近一个 code_execute 条目
+          // （优先 running 的；找不到就退回最近一个 code_execute）
+          const idx = [...arr].map((b, i) => ({ b, i })).reverse()
+            .find((x) => x.b.role === 'assistant' && (x.b.tools || []).some((t) => t.name === 'code_execute'))?.i;
+          if (idx === undefined) return arr;
+          const target = arr[idx];
+          const tools = target.tools || [];
+          // 倒序找最近的 code_execute（优先 running）
+          let hitIdx = -1;
+          for (let i = tools.length - 1; i >= 0; i--) {
+            if (tools[i].name === 'code_execute' && tools[i].status === 'running') { hitIdx = i; break; }
+          }
+          if (hitIdx === -1) {
+            for (let i = tools.length - 1; i >= 0; i--) {
+              if (tools[i].name === 'code_execute') { hitIdx = i; break; }
+            }
+          }
+          if (hitIdx === -1) return arr;
+          const t = tools[hitIdx];
+          const nextTools = tools.slice();
+          nextTools[hitIdx] = { ...t, images: [...(t.images || []), imageBase64] };
+          const updated = { ...target, tools: nextTools };
+          return arr.map((b, i) => (i === idx ? updated : b));
+        });
+      } catch {/* ignore */}
+    });
+
     es.addEventListener('tool:error', (e) => {
       const { toolCallId, error } = JSON.parse((e as MessageEvent).data);
       setBubbles((arr) =>

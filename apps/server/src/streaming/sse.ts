@@ -29,6 +29,8 @@ const EVENTS = [
   // 动态审批
   'permission:requested',
   'permission:resolved',
+  // 沙箱代码执行：matplotlib 图实时推
+  'code:image',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

@@ -19,6 +19,7 @@
     "test:session-concurrency": "tsx examples/test-session-concurrency.ts",
     "test:parallel": "tsx scripts/test-all.ts",
     "test:sqlite-migration": "tsx examples/test-sqlite-migration.ts",
+    "test:code-exec": "tsx examples/test-code-exec.ts",
     "test:skills": "tsx examples/test-skills.ts",
     "test:mcp": "tsx examples/test-mcp.ts",
     "test:resilience": "tsx examples/test-resilience.ts",
@@ -49,6 +50,7 @@
     "pdf-parse": "^2.4.5",
     "pino": "^9.4.0",
     "pino-pretty": "^11.2.2",
+    "pyodide": "^0.29.4",
     "tesseract.js": "^7.0.0",
     "zod": "^3.23.8"
   },

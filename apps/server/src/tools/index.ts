@@ -2,6 +2,7 @@ import { ToolRegistry } from './registry.js';
 import { calculatorTool } from './calculator.js';
 import { fileReadTool, fileWriteTool } from './fileSystem.js';
 import { webSearchTool } from './webSearch.js';
+import { codeExecTool } from './codeExec.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -35,6 +36,10 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
   reg.register({
     ...webSearchTool,
     allowedAgents: ['conductor', 'researcher'],
+  });
+  reg.register({
+    ...codeExecTool,
+    allowedAgents: ['conductor', 'coder'],
   });
 
   const common = { llm, toolRegistry: reg, longTermMemory, bus };
