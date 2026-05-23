@@ -93,6 +93,11 @@ export interface ToolCtx {
    */
   sessionId?: string;
   /**
+   * 当前 turn 的 citation collector。tools（webSearch / fileRead 等）调用时若拿到外部资料，
+   * 应 ctx.citations?.register(...) 拿到 ref 编号写进 tool result，LLM 后续就能用 [ref:N] 引用。
+   */
+  citations?: import('./core/citation.js').CitationCollector;
+  /**
    * 用户 stop / 服务 drain 时会触发 abort。
    * 工具应在长操作（fetch / 子进程 / 大文件读）开始前检查 signal.aborted；
    * 调用支持 AbortSignal 的 API（fetch / child_process）时直接把 signal 传过去。

@@ -31,6 +31,14 @@ const EVENTS = [
   'permission:resolved',
   // 沙箱代码执行：matplotlib 图实时推
   'code:image',
+  // Model routing 决策
+  'router:routed',
+  // Plan-level checkpoint 用户中止
+  'plan:checkpoint:abort',
+  // Reflexion 写下反思
+  'reflexion:noted',
+  // 自动 long-term memory 保存
+  'memory:auto-saved',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

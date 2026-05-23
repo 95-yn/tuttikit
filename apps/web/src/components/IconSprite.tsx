@@ -26,6 +26,8 @@ export function IconSprite() {
       <symbol id="i-menu" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
       <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></symbol>
       <symbol id="i-arrow-down" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></symbol>
+      <symbol id="i-thumbs-up" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></symbol>
+      <symbol id="i-thumbs-down" viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/></symbol>
     </svg>
   );
 }
@@ -35,7 +37,7 @@ export type IconName =
   | 'i-copy' | 'i-check' | 'i-chev-right' | 'i-wrench' | 'i-bot'
   | 'i-search' | 'i-file' | 'i-calc' | 'i-mic' | 'i-mic-off'
   | 'i-download' | 'i-source' | 'i-x' | 'i-warn' | 'i-info' | 'i-menu'
-  | 'i-qr' | 'i-arrow-down';
+  | 'i-qr' | 'i-arrow-down' | 'i-thumbs-up' | 'i-thumbs-down';
 
 export function Icon({
   name, size,

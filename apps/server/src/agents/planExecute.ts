@@ -18,6 +18,12 @@ import type { MessageBus } from '../core/messageBus.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { Trace, Tracer, Span } from '../observability/tracer.js';
 import { revisePlan, type Plan } from './planner.js';
+import { requestApproval } from '../core/approval.js';
+import { reflect } from './reflexion.js';
+
+// W1.4 R4 Task-level checkpoint：每 N 个 step 暂停问用户「继续 / 中止」。
+// 0 = 不做 checkpoint（默认；保留旧行为）
+const PLAN_CHECKPOINT_EVERY = Number(process.env.PLAN_CHECKPOINT_EVERY || 0);
 
 export interface PlanExecuteDeps {
   llm: LLMLike;
@@ -127,6 +133,32 @@ export async function planExecuteSteps(deps: PlanExecuteDeps, args: PlanExecuteA
     });
     stepResults.push({ id: step.id, ok: stepOk, output: stepContent });
 
+    // ── Task-level checkpoint（W1.4 R4）──
+    // 每 N 步暂停问用户继续 / 中止；失败的 step 不算（让 re-plan 兜底），最后一步也不问（聚合再问没意义）
+    if (PLAN_CHECKPOINT_EVERY > 0 && stepOk && pendingSteps.length > 0
+        && stepResults.length % PLAN_CHECKPOINT_EVERY === 0) {
+      const doneSummary = stepResults.slice(-PLAN_CHECKPOINT_EVERY)
+        .map((r) => `  - ${r.id}: ${r.output.slice(0, 80).replace(/\n/g, ' ')}`).join('\n');
+      const allow = await requestApproval({
+        sessionId: args.sessionId,
+        toolName: 'plan-checkpoint',
+        input: { completedCount: stepResults.length, remaining: pendingSteps.length, recent: doneSummary },
+        rule: 'plan-checkpoint',
+        reason: `已完成 ${stepResults.length} 步，还剩 ${pendingSteps.length} 步。最近 ${PLAN_CHECKPOINT_EVERY} 步：\n${doneSummary}\n\n继续还是中止？`,
+        bus: deps.bus,
+        signal: args.signal,
+      });
+      if (!allow) {
+        deps.logger.warn({ done: stepResults.length, remaining: pendingSteps.length }, '[plan] checkpoint 被拒，中止剩余 step');
+        deps.bus?.emit('plan:checkpoint:abort', {
+          sessionId: args.sessionId,
+          completedCount: stepResults.length,
+          remainingCount: pendingSteps.length,
+        });
+        break;
+      }
+    }
+
     // 失败 → 一次 re-plan 机会
     if (!stepOk) {
       if (revised) {
@@ -135,12 +167,23 @@ export async function planExecuteSteps(deps: PlanExecuteDeps, args: PlanExecuteA
       }
       revised = true;
       deps.logger.info({ stepId: step.id, error: stepError }, '[plan] step 失败，尝试 re-plan 剩余步骤');
+      // Reflexion（W2.1 R2）：先让 LLM 反思失败原因 → 附到 re-plan prompt
+      const reflection = await reflect({
+        llm: deps.llm,
+        taskDescription: step.description,
+        failureReason: stepError || stepContent.slice(0, 200),
+        completedSummary: stepResults.filter((r) => r.ok).map((r) => r.id).join(', '),
+      });
+      if (reflection) {
+        deps.bus?.emit('reflexion:noted', { sessionId: args.sessionId, stepId: step.id, reflection });
+        deps.logger.info({ stepId: step.id, reflection: reflection.slice(0, 100) }, '[reflexion] 写了反思');
+      }
       const replanSpan = args.tracer.startSpan(args.trace, 'llm', 'conductor.replan', { parentId: args.span.spanId });
       try {
         const revisedPlan = await revisePlan(deps.llm, {
           userMessage: args.userMessage,
           failedStepId: step.id,
-          failureReason: stepError || stepContent.slice(0, 200),
+          failureReason: (stepError || stepContent.slice(0, 200)) + (reflection ? `\n\n反思：${reflection}` : ''),
           completedSteps: stepResults
             .filter((r) => r.ok)
             .map((r) => ({ id: r.id, description: '', outputDigest: r.output.slice(0, 80) })),

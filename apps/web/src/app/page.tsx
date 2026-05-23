@@ -289,6 +289,7 @@ export default function ChatPage() {
                     key={b.id}
                     data={{ ...b, isLatestAssistant: b.id === latestAssistantId }}
                     onRegenerate={b.id === latestAssistantId ? regenerate : undefined}
+                    sessionId={currentId}
                   />
                 ));
               })()

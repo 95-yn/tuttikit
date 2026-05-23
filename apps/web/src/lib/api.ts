@@ -108,3 +108,40 @@ export async function answerPermission(
   });
   return r.json();
 }
+
+// ───── 用户反馈（👍/👎）─────
+export interface FeedbackRecord {
+  id: string;
+  sessionId: string;
+  messageId: string;
+  rating: 1 | -1;
+  comment?: string;
+  createdAt: number;
+}
+
+export async function postMessageFeedback(
+  sessionId: string,
+  messageId: string,
+  rating: 1 | -1,
+  comment?: string,
+): Promise<FeedbackRecord> {
+  const r = await fetch(`${API}/sessions/${sessionId}/messages/${messageId}/feedback`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ rating, comment }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `feedback failed: ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function listSessionFeedback(sessionId: string): Promise<{
+  items: FeedbackRecord[];
+  stats: { up: number; down: number; total: number };
+}> {
+  const r = await fetch(`${API}/sessions/${sessionId}/feedback`);
+  if (!r.ok) return { items: [], stats: { up: 0, down: 0, total: 0 } };
+  return r.json();
+}

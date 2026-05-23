@@ -9,6 +9,7 @@ import { contextWindowOf } from './llm/contextWindow.js';
 import { installDefaultSafetyHooks } from './core/safetyRules.js';
 import { migrateJSONToSQLite } from './core/migration.js';
 import { closeDB, getDB } from './core/db.js';
+import { saveFeedback, getFeedbackForSession, feedbackStats } from './core/feedback.js';
 import {
   installApprovalHook, resolveApproval, listPending,
   cancelAllForSession, clearStaleApprovalsOnBoot,
@@ -237,6 +238,21 @@ app.post('/sessions/:id/permissions/:reqId/answer', express.json(), (req, res) =
   const result = resolveApproval(req.params.reqId, allow);
   if (!result.ok) return res.status(404).json(result);
   res.json({ ok: true, allow });
+});
+
+// ── 用户对 assistant 消息打 👍/👎（W1.1 Y7）──
+app.post('/sessions/:id/messages/:messageId/feedback', express.json(), (req, res) => {
+  const body = req.body as { rating?: unknown; comment?: unknown };
+  const rating = body?.rating === 1 || body?.rating === -1 ? body.rating : null;
+  if (rating === null) return res.status(400).json({ error: 'rating 必填且必须是 1 或 -1' });
+  const comment = typeof body.comment === 'string' ? body.comment.slice(0, 1000) : undefined;
+  const rec = saveFeedback({
+    sessionId: req.params.id, messageId: req.params.messageId, rating, comment,
+  });
+  res.json(rec);
+});
+app.get('/sessions/:id/feedback', (req, res) => {
+  res.json({ items: getFeedbackForSession(req.params.id), stats: feedbackStats(req.params.id) });
 });
 
 // 截断消息：DELETE /sessions/:id/messages?fromIndex=N （重生 / 编辑后重发用）

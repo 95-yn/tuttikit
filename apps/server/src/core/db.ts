@@ -92,12 +92,31 @@ export function transaction<T>(fn: () => T): T {
  * 表结构 + schema version。
  * 加新表时：在 schema_versions 里加一条 migration，按版本号顺序跑。
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 function _ensureSchema(db: DatabaseSync): void {
   // 用 user_version PRAGMA 跟踪当前 schema 版本
   const cur = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   if (cur >= SCHEMA_VERSION) return;
+
+  // v2 migration（增量）：从 v1 上来只跑新 CREATE，不动现有表
+  if (cur >= 1) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS message_feedback (
+        id           TEXT PRIMARY KEY,
+        session_id   TEXT NOT NULL,
+        message_id   TEXT NOT NULL,
+        rating       INTEGER NOT NULL,        -- 1 = 👍, -1 = 👎
+        comment      TEXT,
+        created_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_feedback_session ON message_feedback(session_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_msg ON message_feedback(session_id, message_id);
+    `);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    logger.info({ from: cur, to: SCHEMA_VERSION }, '[db] schema 增量迁移完成');
+    return;
+  }
 
   // v1：四张表
   db.exec(`
@@ -155,6 +174,18 @@ function _ensureSchema(db: DatabaseSync): void {
       timeout_ms    INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_approvals_session ON approvals(session_id);
+
+    -- message_feedback：用户对 assistant 消息的 👍/👎（W1.1 Y7）
+    CREATE TABLE IF NOT EXISTS message_feedback (
+      id           TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL,
+      message_id   TEXT NOT NULL,
+      rating       INTEGER NOT NULL,        -- 1 = 👍, -1 = 👎
+      comment      TEXT,
+      created_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_session ON message_feedback(session_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_msg ON message_feedback(session_id, message_id);
   `);
 
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

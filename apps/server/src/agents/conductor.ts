@@ -8,6 +8,9 @@ import { SELF_CRITIQUE_PROMPT } from '../prompts/selfCritique.js';
 import { planTask, renderPlanForConductor, shouldPlan, type Plan } from './planner.js';
 import { planExecuteSteps } from './planExecute.js';
 import { compactIfNeeded, persistCompact, recallRelevant, formatRecalled } from '../core/sessionCompact.js';
+import { CitationCollector, CITATION_INSTRUCTION } from '../core/citation.js';
+import { extractAndRemember } from '../memory/autoExtract.js';
+import { longTermMemory } from '../memory/longTerm.js';
 import { contextWindowOf } from '../llm/contextWindow.js';
 import { redactSecrets } from '../core/redact.js';
 import type { Logger } from 'pino';
@@ -112,6 +115,8 @@ export class ConductorAgent {
     // D: 把当前 user query 拿去 archive 做 RAG 召回，相关历史片段拼回 system prompt
     //   两者都跑在 plan / react 之前，让后续走压缩后的 session
     let recalledBlock = '';
+    // citations per turn：tools / RAG 注册的 source 都进这个 pool，turn 结束写到 meta
+    const citations = new CitationCollector();
     try {
       const modelForCtx = (this.llm as { model?: { modelId?: string } }).model?.modelId
         || (config.llm as unknown as Record<string, { model?: string }>)[this.llm.name]?.model
@@ -135,22 +140,24 @@ export class ConductorAgent {
           '[compact] 触发上下文压缩',
         );
       }
-      // RAG 召回（archive 非空时才有意义）
+      // RAG 召回（archive 非空时才有意义）；同时 register 到 citations 让 LLM 能引用
       const recalled = await recallRelevant({ sessionId, query: userMessage });
       if (recalled.length > 0) {
-        recalledBlock = '\n\n' + formatRecalled(recalled);
+        recalledBlock = '\n\n' + formatRecalled(recalled, citations);
         this.bus?.emit('context:recalled', { sessionId, count: recalled.length });
       }
     } catch (err) {
       // compact / recall 任一失败都不应该让对话挂掉；记 warn 让对话继续走原始 messages
       this.logger.warn({ err: (err as Error).message }, '[compact/recall] 失败，跳过');
     }
+    // 有 source 才加 citation instruction，避免空池子也教 LLM 引用（它会瞎标）
+    const citationBlock = citations.size() > 0 ? CITATION_INSTRUCTION : '';
 
     // Plan-and-Execute V1：先调 planner 拿 steps，把计划渲染进 system，让 ReAct 按计划走。
     // 启发式（shouldPlan）过滤短任务，避免每个 "你好" 都烧一次 planner。
     let plan: Plan | null = null;
     // 注意：recalledBlock 拼在 system prompt **尾部**，前缀部分保持稳定让 Anthropic prompt cache 命中（Manus / Claude Code 经验）
-    let augmentedSystem = this.systemPrompt + recalledBlock;
+    let augmentedSystem = this.systemPrompt + recalledBlock + citationBlock;
     if (config.agent.planAndExecute && shouldPlan(userMessage)) {
       const planSpan = tracer.startSpan(trace, 'llm', 'conductor.plan', { parentId: span.spanId });
       try {
@@ -182,7 +189,7 @@ export class ConductorAgent {
             runReactSteps: (a) => this._runReactSteps(a),
           },
           {
-            plan, sessionId, augmentedSystem: this.systemPrompt + recalledBlock,   // V2 不注入 plan 进 system
+            plan, sessionId, augmentedSystem: this.systemPrompt + recalledBlock + citationBlock,   // V2 不注入 plan 进 system
             tools, span, trace, tracer, stream,
             totalUsage, stepCounter,
             userMessage,
@@ -200,6 +207,7 @@ export class ConductorAgent {
           allowCritique: true,
           critiqueDoneRef,
           signal: ac.signal,
+          citations,
         });
       }
 
@@ -221,14 +229,37 @@ export class ConductorAgent {
         this.bus?.emit('budget:warn', budget.warn);
       }
       tracer.endSpan(trace, span, { usage: totalUsage });
+      // citations 写到最后一条 assistant 消息的 meta（前端拿来渲染 footnote）
+      if (citations.size() > 0) {
+        const sess = await this.sessionManager.get(sessionId);
+        const lastAssistant = sess?.messages.slice().reverse().find((m) => m.role === 'assistant');
+        if (lastAssistant) {
+          lastAssistant.meta = { ...lastAssistant.meta, citations: citations.export() };
+          if (sess) await this.sessionManager.replace(sess);
+        }
+      }
       this.bus?.emit('turn:done', {
         sessionId, usage: totalUsage, steps: stepCounter.value,
         turnUSD: budget.turnUSD, sessionUSD: budget.sessionUSD,
+        citations: citations.export(),
       });
       this.logger.info(
         { sessionId, steps: stepCounter.value, usage: totalUsage, turnUSD: budget.turnUSD, sessionUSD: budget.sessionUSD },
         'turn done',
       );
+      // 自动 long-term memory 提取（W2.2 Y3）：fire-and-forget，不阻塞响应
+      if (process.env.MEMORY_AUTO_EXTRACT === 'true') {
+        const finalAssistant = (await this.sessionManager.get(sessionId))?.messages
+          .slice().reverse().find((m) => m.role === 'assistant');
+        if (finalAssistant?.content) {
+          void extractAndRemember({
+            userMessage, assistantResponse: finalAssistant.content,
+            llm: this.llm, longTermMemory,
+          }).then((r) => {
+            if (r.added > 0) this.bus?.emit('memory:auto-saved', { sessionId, count: r.added });
+          }).catch((err) => this.logger.warn({ err: (err as Error).message }, '[auto-memory] fire-and-forget 失败'));
+        }
+      }
       return { usage: totalUsage, steps: stepCounter.value };
     } catch (err) {
       const e = err as Error;
@@ -264,10 +295,12 @@ export class ConductorAgent {
     allowCritique: boolean;
     critiqueDoneRef: { value: boolean };
     signal?: AbortSignal;
+    citations?: CitationCollector;
   }): Promise<{ finalContent: string }> {
     const {
       sessionId, augmentedSystem, tools, span, trace, tracer, stream,
       totalUsage, stepCounter, maxSteps, userMessage, allowCritique, critiqueDoneRef, signal,
+      citations,
     } = args;
     let finalContent = '';
     let stepsTaken = 0;
@@ -354,6 +387,7 @@ export class ConductorAgent {
             bus: this.bus,
             signal,
             sessionId,
+            citations,
           });
           tracer.endSpan(trace, toolSpan, { output: truncate(result) });
           this.bus?.emit('tool:end', { sessionId, toolCallId: call.id, name: call.name, result });

@@ -11,6 +11,7 @@ import { getUpload } from '../core/uploads.js';
 import { MessageBus } from '../core/messageBus.js';
 import { attachSSE } from '../streaming/sse.js';
 import { createLLM } from '../llm/index.js';
+import { routeForMessage } from '../llm/router.js';
 import { buildToolRegistryWithSubAgents } from '../tools/index.js';
 import { longTermMemory } from '../memory/longTerm.js';
 import { ConductorAgent } from '../agents/index.js';
@@ -49,8 +50,16 @@ export function register(app: Express): void {
     const bus = new MessageBus();
     attachSSE(bus, res);
 
-    // createLLM 现在带缓存（P1）：同 (provider, fallbackChain) 复用同一实例
-    const llm = createLLM(provider);
+    // Model routing（W1.2 Y2）：MODEL_ROUTING=true 时按 user message 复杂度自动选 model
+    // 注意：用户 ?provider= 参数显式指定时 *跳过* routing（用户意图优先）
+    let llm;
+    if (process.env.MODEL_ROUTING === 'true' && !provider) {
+      const routed = await routeForMessage(message);
+      llm = routed.llm;
+      bus.emit('router:routed', { complexity: routed.complexity, provider: routed.provider });
+    } else {
+      llm = createLLM(provider);
+    }
     const toolRegistry = buildToolRegistryWithSubAgents({ llm, longTermMemory, bus });
     const conductor = new ConductorAgent({ llm, toolRegistry, sessionManager, bus });
 

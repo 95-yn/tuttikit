@@ -189,6 +189,7 @@ export function useChat(sessionId: string | null): UseChatState {
           id: nextLocalId(), role: 'assistant',
           content: m.content || '', createdAt: m.meta?.createdAt,
           tools,
+          _remoteId: m.meta?.id,        // 历史回放也要带上 backend message id，反馈/重生才能用
         });
       } else if (m.role === 'tool') {
         // 把 tool 输出回填到最近一条 assistant 的对应 toolCall

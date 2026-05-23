@@ -5,6 +5,7 @@ import { Markdown } from './Markdown';
 import { ToolBlock, type ToolEntry } from './ToolBlock';
 import { AttachmentList } from './AttachmentList';
 import { fmtTime } from '@/lib/markdown';
+import * as api from '@/lib/api';
 import type { Attachment } from '@/lib/types';
 
 export interface BubbleData {
@@ -23,11 +24,12 @@ export interface BubbleData {
 interface MessageBubbleProps {
   data: BubbleData;
   onRegenerate?: () => void;        // 只在 isLatestAssistant 时被调用
+  sessionId?: string | null;        // 反馈接口需要；缺失则按钮置灰不可点
 }
 
 export const MessageBubble = memo(MessageBubbleImpl, (prev, next) => {
   const a = prev.data, b = next.data;
-  if (a === b && prev.onRegenerate === next.onRegenerate) return true;
+  if (a === b && prev.onRegenerate === next.onRegenerate && prev.sessionId === next.sessionId) return true;
   if (a.streaming || b.streaming) return false;
   return (
     a.id === b.id &&
@@ -37,16 +39,38 @@ export const MessageBubble = memo(MessageBubbleImpl, (prev, next) => {
     a.attachments === b.attachments &&
     a.streaming === b.streaming &&
     a.isLatestAssistant === b.isLatestAssistant &&
-    prev.onRegenerate === next.onRegenerate
+    a._remoteId === b._remoteId &&
+    prev.onRegenerate === next.onRegenerate &&
+    prev.sessionId === next.sessionId
   );
 });
 
-function MessageBubbleImpl({ data, onRegenerate }: MessageBubbleProps) {
+function MessageBubbleImpl({ data, onRegenerate, sessionId }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
+  // 本地乐观状态：用户点完立即变色，POST 失败再回滚
+  const [rating, setRating] = useState<1 | -1 | null>(null);
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
   const onCopy = async () => {
     try { await navigator.clipboard.writeText(data.content); } catch {/* ignore */}
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
+  };
+
+  const canRate = data.role === 'assistant' && !!sessionId && !!data._remoteId && !data.streaming;
+  const onRate = async (next: 1 | -1) => {
+    if (!canRate || feedbackBusy) return;
+    if (rating === next) return;       // 同一按钮重复点不重复请求
+    const prev = rating;
+    setRating(next);
+    setFeedbackBusy(true);
+    try {
+      await api.postMessageFeedback(sessionId!, data._remoteId!, next);
+    } catch (err) {
+      setRating(prev);                 // 失败回滚
+      console.error('[feedback] 提交失败', err);
+    } finally {
+      setFeedbackBusy(false);
+    }
   };
 
   if (data.role === 'error') {
@@ -107,6 +131,32 @@ function MessageBubbleImpl({ data, onRegenerate }: MessageBubbleProps) {
                   <Icon name="i-edit" size="sm" />
                   <span>重生</span>
                 </button>
+              )}
+              {data.role === 'assistant' && (
+                <div className="msg-feedback" role="group" aria-label="对回答评价">
+                  <button
+                    type="button"
+                    className={'msg-feedback-btn' + (rating === 1 ? ' up' : '')}
+                    onClick={() => onRate(1)}
+                    disabled={!canRate || feedbackBusy}
+                    aria-label="赞"
+                    aria-pressed={rating === 1}
+                    title="这条有帮助"
+                  >
+                    <Icon name="i-thumbs-up" size="sm" />
+                  </button>
+                  <button
+                    type="button"
+                    className={'msg-feedback-btn' + (rating === -1 ? ' down' : '')}
+                    onClick={() => onRate(-1)}
+                    disabled={!canRate || feedbackBusy}
+                    aria-label="踩"
+                    aria-pressed={rating === -1}
+                    title="这条不行"
+                  >
+                    <Icon name="i-thumbs-down" size="sm" />
+                  </button>
+                </div>
               )}
             </div>
           )}

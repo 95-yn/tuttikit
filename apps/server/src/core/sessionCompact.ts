@@ -349,12 +349,26 @@ export async function recallRelevant(args: {
   return candidates.map((c) => c.m);
 }
 
-/** 把召回结果格式化成一段可注入 user message 的文本 */
-export function formatRecalled(items: ArchivedMessage[]): string {
+/**
+ * 把召回结果格式化成一段可注入 user message 的文本。
+ * 可选 citations collector：传了就把每条 recall 注册成 source，块前缀换成 [N]，
+ *   LLM 后续能用 [ref:N] 引用回这条召回历史。
+ */
+export function formatRecalled(
+  items: ArchivedMessage[],
+  citations?: import('./citation.js').CitationCollector,
+): string {
   if (items.length === 0) return '';
   const blocks = items.map((m, i) => {
     const role = m.role === 'user' ? '用户' : m.role === 'assistant' ? 'AI' : m.role;
-    return `[相关历史 ${i + 1} · ${role}] ${m.content.slice(0, 600)}`;
+    const snippet = m.content.slice(0, 600);
+    const ref = citations?.register({
+      title: `早期 ${role} 消息 #${m.originalIndex}`,
+      kind: 'rag',
+      snippet,
+    });
+    const prefix = ref !== undefined ? `[${ref}] (相关历史 · ${role})` : `[相关历史 ${i + 1} · ${role}]`;
+    return `${prefix} ${snippet}`;
   });
   return [
     '以下是从早期对话里按当前问题召回的相关片段（仅供参考，不要复读）：',

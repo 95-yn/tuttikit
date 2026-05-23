@@ -1180,6 +1180,24 @@ body {
 .msg-action-btn:hover { background: var(--bg-elev-2); color: var(--text); }
 .msg-action-btn.copied { color: var(--ok); }
 
+/* ── 👍/👎 反馈按钮（右下角，跟 copy/regen 同一行） ── */
+.msg-feedback {
+  display: inline-flex; gap: 2px;
+  margin-left: auto;             /* 推到 actions 行的最右侧 */
+}
+.msg-feedback-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  background: transparent; border: 0; border-radius: 4px;
+  color: var(--muted); cursor: pointer;
+  transition: background .12s ease, color .12s ease, transform .08s ease;
+}
+.msg-feedback-btn:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text); }
+.msg-feedback-btn:active:not(:disabled) { transform: scale(.92); }
+.msg-feedback-btn:disabled { opacity: .4; cursor: not-allowed; }
+.msg-feedback-btn.up   { color: var(--ok, #4ade80); background: color-mix(in srgb, var(--ok, #4ade80) 15%, transparent); }
+.msg-feedback-btn.down { color: var(--error, #ef4444); background: color-mix(in srgb, var(--error, #ef4444) 15%, transparent); }
+
 /* ════════════════════════════════════════════════════
    Tool call bubble (custom: dim, foldable)
    ════════════════════════════════════════════════════ */
