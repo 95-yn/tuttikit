@@ -4,6 +4,7 @@ import { fileReadTool, fileWriteTool } from './fileSystem.js';
 import { webSearchTool } from './webSearch.js';
 import { codeExecTool } from './codeExec.js';
 import { renderArtifactTool } from './artifact.js';
+import { gitStatusTool, gitDiffTool } from './git.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -45,6 +46,14 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
   reg.register({
     ...renderArtifactTool,
     allowedAgents: ['conductor', 'coder'],
+  });
+  reg.register({
+    ...gitStatusTool,
+    allowedAgents: ['conductor', 'coder', 'reviewer'],
+  });
+  reg.register({
+    ...gitDiffTool,
+    allowedAgents: ['conductor', 'coder', 'reviewer'],
   });
 
   const common = { llm, toolRegistry: reg, longTermMemory, bus };

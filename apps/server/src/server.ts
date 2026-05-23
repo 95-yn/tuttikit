@@ -10,7 +10,7 @@ import { installDefaultSafetyHooks } from './core/safetyRules.js';
 import { migrateJSONToSQLite } from './core/migration.js';
 import { closeDB, getDB } from './core/db.js';
 import { saveFeedback, getFeedbackForSession, feedbackStats } from './core/feedback.js';
-import { getArtifact, listArtifactsForSession } from './core/artifact.js';
+import { getArtifact, listArtifactsForSession, saveArtifact } from './core/artifact.js';
 import {
   installApprovalHook, resolveApproval, listPending,
   cancelAllForSession, clearStaleApprovalsOnBoot,
@@ -264,6 +264,27 @@ app.get('/artifacts/:id', (req, res) => {
   const a = getArtifact(req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
   res.json(a);
+});
+// 用户直接编辑保存：body { html, title?, kind? }
+app.put('/artifacts/:id', express.json({ limit: '1mb' }), (req, res) => {
+  const current = getArtifact(req.params.id);
+  if (!current) return res.status(404).json({ error: 'not found' });
+  const body = req.body as { html?: unknown; title?: unknown; kind?: unknown };
+  if (typeof body.html !== 'string' || body.html.length === 0) {
+    return res.status(400).json({ error: 'html 必填' });
+  }
+  try {
+    const updated = saveArtifact({
+      id: current.id,
+      sessionId: current.sessionId,
+      kind: (typeof body.kind === 'string' ? body.kind : current.kind) as 'html' | 'svg' | 'react',
+      title: typeof body.title === 'string' ? body.title : current.title,
+      html: body.html,
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
 });
 
 // 截断消息：DELETE /sessions/:id/messages?fromIndex=N （重生 / 编辑后重发用）

@@ -171,3 +171,19 @@ export async function getArtifact(id: string): Promise<Artifact> {
   }
   return r.json();
 }
+
+export async function updateArtifact(
+  id: string,
+  body: { html: string; title?: string; kind?: 'html' | 'svg' | 'react' },
+): Promise<Artifact> {
+  const r = await fetch(`${API}/artifacts/${id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `updateArtifact failed: ${r.status}`);
+  }
+  return r.json();
+}
