@@ -88,6 +88,9 @@ function MessageBubbleImpl({ data, onRegenerate, sessionId }: MessageBubbleProps
   }
 
   const showActions = !data.streaming && data.content;
+  const artifactCount = (data.tools || []).filter(
+    (t) => t.name === 'render_artifact' && t.status === 'ok',
+  ).length;
 
   return (
     <div className={`msg ${data.role}`}>
@@ -111,6 +114,15 @@ function MessageBubbleImpl({ data, onRegenerate, sessionId }: MessageBubbleProps
           )}
           {showActions && (
             <div className="msg-actions">
+              {artifactCount > 0 && (
+                <span
+                  className="msg-artifact-badge"
+                  title={`本条触发了 ${artifactCount} 个 artifact`}
+                  aria-label={`本条触发了 ${artifactCount} 个 artifact`}
+                >
+                  📐{artifactCount > 1 ? ` ×${artifactCount}` : ''}
+                </span>
+              )}
               <button
                 className={'msg-action-btn' + (copied ? ' copied' : '')}
                 onClick={onCopy}

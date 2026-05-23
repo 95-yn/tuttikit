@@ -92,27 +92,43 @@ export function transaction<T>(fn: () => T): T {
  * 表结构 + schema version。
  * 加新表时：在 schema_versions 里加一条 migration，按版本号顺序跑。
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function _ensureSchema(db: DatabaseSync): void {
   // 用 user_version PRAGMA 跟踪当前 schema 版本
   const cur = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   if (cur >= SCHEMA_VERSION) return;
 
-  // v2 migration（增量）：从 v1 上来只跑新 CREATE，不动现有表
-  if (cur >= 1) {
+  // 增量迁移：每个 v_n → v_{n+1} 独立跑，不重复 v1 的全量建表
+  if (cur >= 1 && cur < 2) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS message_feedback (
         id           TEXT PRIMARY KEY,
         session_id   TEXT NOT NULL,
         message_id   TEXT NOT NULL,
-        rating       INTEGER NOT NULL,        -- 1 = 👍, -1 = 👎
+        rating       INTEGER NOT NULL,
         comment      TEXT,
         created_at   INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_feedback_session ON message_feedback(session_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_msg ON message_feedback(session_id, message_id);
     `);
+  }
+  if (cur >= 2 && cur < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id           TEXT PRIMARY KEY,
+        session_id   TEXT NOT NULL,
+        kind         TEXT NOT NULL,
+        title        TEXT,
+        html         TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, updated_at DESC);
+    `);
+  }
+  if (cur >= 1) {
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     logger.info({ from: cur, to: SCHEMA_VERSION }, '[db] schema 增量迁移完成');
     return;
@@ -186,6 +202,18 @@ function _ensureSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_feedback_session ON message_feedback(session_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_msg ON message_feedback(session_id, message_id);
+
+    -- artifacts：LLM 生成的可渲染 HTML/SVG 片段（v3，Claude Artifacts 风格）
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id           TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL,
+      kind         TEXT NOT NULL,                  -- 'html' | 'svg' | 'react'
+      title        TEXT,
+      html         TEXT NOT NULL,
+      created_at   INTEGER NOT NULL,
+      updated_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, updated_at DESC);
   `);
 
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

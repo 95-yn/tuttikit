@@ -39,6 +39,8 @@ const EVENTS = [
   'reflexion:noted',
   // 自动 long-term memory 保存
   'memory:auto-saved',
+  // Artifact 渲染（Claude Artifacts 风格）
+  'artifact:rendered',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

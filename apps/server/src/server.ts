@@ -10,6 +10,7 @@ import { installDefaultSafetyHooks } from './core/safetyRules.js';
 import { migrateJSONToSQLite } from './core/migration.js';
 import { closeDB, getDB } from './core/db.js';
 import { saveFeedback, getFeedbackForSession, feedbackStats } from './core/feedback.js';
+import { getArtifact, listArtifactsForSession } from './core/artifact.js';
 import {
   installApprovalHook, resolveApproval, listPending,
   cancelAllForSession, clearStaleApprovalsOnBoot,
@@ -253,6 +254,16 @@ app.post('/sessions/:id/messages/:messageId/feedback', express.json(), (req, res
 });
 app.get('/sessions/:id/feedback', (req, res) => {
   res.json({ items: getFeedbackForSession(req.params.id), stats: feedbackStats(req.params.id) });
+});
+
+// ── Artifacts（Claude Artifacts 风格的 LLM 渲染 HTML）──
+app.get('/sessions/:id/artifacts', (req, res) => {
+  res.json({ items: listArtifactsForSession(req.params.id) });
+});
+app.get('/artifacts/:id', (req, res) => {
+  const a = getArtifact(req.params.id);
+  if (!a) return res.status(404).json({ error: 'not found' });
+  res.json(a);
 });
 
 // 截断消息：DELETE /sessions/:id/messages?fromIndex=N （重生 / 编辑后重发用）

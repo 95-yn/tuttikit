@@ -1,7 +1,9 @@
 'use client';
 import { memo, useState } from 'react';
 import { Icon, type IconName } from './IconSprite';
+import { ArtifactFrame } from './ArtifactFrame';
 import { compactJsonOneLine, prettyJson } from '@/lib/markdown';
+import type { Artifact } from '@/lib/api';
 
 const ICON_FOR_TOOL: Record<string, IconName> = {
   calculator: 'i-calc',
@@ -9,7 +11,17 @@ const ICON_FOR_TOOL: Record<string, IconName> = {
   file_system_read: 'i-file',
   file_system_write: 'i-file',
   code_execute: 'i-wrench',
+  render_artifact: 'i-source',
 };
+
+/** 后端 render_artifact tool 完成后 output 就是一个 Artifact —— 鸭子类型校验，避免误判 */
+function asArtifact(out: unknown): Artifact | null {
+  if (!out || typeof out !== 'object') return null;
+  const o = out as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.html !== 'string') return null;
+  if (typeof o.sessionId !== 'string' || typeof o.kind !== 'string') return null;
+  return out as Artifact;
+}
 
 export interface ToolEntry {
   toolCallId: string;
@@ -36,6 +48,7 @@ function ToolBlockImpl({ entry }: { entry: ToolEntry }) {
   const statusText = entry.status === 'running' ? '运行中'
     : entry.status === 'ok' ? '完成' : '失败';
   const hasImages = entry.name === 'code_execute' && !!entry.images && entry.images.length > 0;
+  const artifact = entry.name === 'render_artifact' ? asArtifact(entry.output) : null;
 
   return (
     <div className={'tool-block' + (isDelegate ? ' delegate' : '') + (open ? ' open' : '')}>
@@ -46,6 +59,11 @@ function ToolBlockImpl({ entry }: { entry: ToolEntry }) {
         {hasImages && (
           <span className="tstatus ok" style={{ marginRight: 6 }}>
             {entry.images!.length} 图
+          </span>
+        )}
+        {artifact && (
+          <span className="tstatus ok" style={{ marginRight: 6 }} title="已渲染 Artifact">
+            📐 {artifact.kind}
           </span>
         )}
         <span className={'tstatus ' + entry.status}>{statusText}</span>
@@ -84,6 +102,13 @@ function ToolBlockImpl({ entry }: { entry: ToolEntry }) {
                 />
               ))}
             </div>
+          </>
+        )}
+        {artifact && (
+          <>
+            <div className="label">Artifact</div>
+            {/* key=artifact.id：同 id 重复 render 时 React 卸载旧 iframe 再挂新 iframe（无缝替换） */}
+            <ArtifactFrame key={artifact.id} artifact={artifact} />
           </>
         )}
       </div>

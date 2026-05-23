@@ -36,6 +36,7 @@ const TESTS = [
   'test-session-concurrency.ts',
   'test-sqlite-migration.ts',
   'test-code-exec.ts',
+  'test-artifact.ts',
 ];
 
 // 解析参数

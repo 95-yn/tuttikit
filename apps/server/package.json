@@ -20,6 +20,7 @@
     "test:parallel": "tsx scripts/test-all.ts",
     "test:sqlite-migration": "tsx examples/test-sqlite-migration.ts",
     "test:code-exec": "tsx examples/test-code-exec.ts",
+    "test:artifact": "tsx examples/test-artifact.ts",
     "test:skills": "tsx examples/test-skills.ts",
     "test:mcp": "tsx examples/test-mcp.ts",
     "test:resilience": "tsx examples/test-resilience.ts",

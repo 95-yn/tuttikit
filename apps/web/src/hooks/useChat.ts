@@ -1,6 +1,7 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '@/lib/api';
+import type { Artifact } from '@/lib/api';
 import type { Attachment, Session } from '@/lib/types';
 import type { BubbleData } from '@/components/MessageBubble';
 import type { ToolEntry } from '@/components/ToolBlock';
@@ -61,6 +62,8 @@ export interface UseChatState {
   reset: () => void;
   pendingApproval: PendingApprovalUI | null;
   answerPermission: (allow: boolean) => Promise<void>;
+  /** Claude Artifacts 风格的 LLM 渲染 HTML（按 updatedAt desc 排好序，同 id 重复 render 自动替换） */
+  artifacts: Artifact[];
 }
 
 let _bubbleSeq = 0;
@@ -75,6 +78,13 @@ export function useChat(sessionId: string | null): UseChatState {
   });
   const [notices, setNotices] = useState<ChatNotice[]>([]);
   const [pendingApproval, setPendingApproval] = useState<PendingApprovalUI | null>(null);
+  // artifacts 用 Map<id, Artifact> 内部存（O(1) 同 id 覆盖更新），
+  // 暴露给页面前 useMemo 转成按 updatedAt desc 排序的 array。
+  const [artifactMap, setArtifactMap] = useState<Map<string, Artifact>>(() => new Map());
+  const artifacts = useMemo(
+    () => Array.from(artifactMap.values()).sort((a, b) => b.updatedAt - a.updatedAt),
+    [artifactMap],
+  );
 
   const pushNotice = useCallback((n: Omit<ChatNotice, 'id' | 'at'>) => {
     const id = `notice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -154,6 +164,7 @@ export function useChat(sessionId: string | null): UseChatState {
       sessionUSD: 0, budgetWarn: null,
     });
     setNotices([]);
+    setArtifactMap(new Map());
   }, [sessionId, stop]);
 
   // 组件卸载时取消挂起的 rAF
@@ -213,6 +224,13 @@ export function useChat(sessionId: string | null): UseChatState {
       if (stats.totalUSD > 0) {
         setCtxUsage((u) => ({ ...u, sessionUSD: stats.totalUSD }));
       }
+    } catch {/* ignore */}
+    // 拉回这个 session 的历史 artifact（刷新页面 / 切回旧 session 都要能看到）
+    try {
+      const { items } = await api.listArtifacts(session.id);
+      const next = new Map<string, Artifact>();
+      for (const a of items) next.set(a.id, a);
+      setArtifactMap(next);
     } catch {/* ignore */}
     // reconnect 时同步当前 session 是否有 pending 审批（之前已发出但前端断连了）
     try {
@@ -359,6 +377,35 @@ export function useChat(sessionId: string | null): UseChatState {
           nextTools[hitIdx] = { ...t, images: [...(t.images || []), imageBase64] };
           const updated = { ...target, tools: nextTools };
           return arr.map((b, i) => (i === idx ? updated : b));
+        });
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('artifact:rendered', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          sessionId: string;
+          artifactId: string;
+          kind: 'html' | 'svg' | 'react';
+          title?: string;
+          html: string;
+          updatedAt: number;
+        };
+        if (!sessionId || data.sessionId !== sessionId) return;
+        setArtifactMap((m) => {
+          const next = new Map(m);
+          const prev = next.get(data.artifactId);
+          next.set(data.artifactId, {
+            id: data.artifactId,
+            sessionId: data.sessionId,
+            kind: data.kind,
+            title: data.title,
+            html: data.html,
+            updatedAt: data.updatedAt,
+            // SSE 没回 createdAt；同 id 更新时沿用旧的，否则用 updatedAt 兜底
+            createdAt: prev?.createdAt ?? data.updatedAt,
+          });
+          return next;
         });
       } catch {/* ignore */}
     });
@@ -598,5 +645,6 @@ export function useChat(sessionId: string | null): UseChatState {
     bubbles, busy, ctxUsage, notices, dismissNotice,
     send, stop, loadFromSession, reset,
     pendingApproval, answerPermission,
+    artifacts,
   };
 }

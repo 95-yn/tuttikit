@@ -145,3 +145,29 @@ export async function listSessionFeedback(sessionId: string): Promise<{
   if (!r.ok) return { items: [], stats: { up: 0, down: 0, total: 0 } };
   return r.json();
 }
+
+// ───── Artifacts（Claude Artifacts 风格的沙箱 HTML 渲染）─────
+export interface Artifact {
+  id: string;
+  sessionId: string;
+  kind: 'html' | 'svg' | 'react';
+  title?: string;
+  html: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export async function listArtifacts(sessionId: string): Promise<{ items: Artifact[] }> {
+  const r = await fetch(`${API}/sessions/${sessionId}/artifacts`);
+  if (!r.ok) return { items: [] };
+  return r.json();
+}
+
+export async function getArtifact(id: string): Promise<Artifact> {
+  const r = await fetch(`${API}/artifacts/${id}`);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `getArtifact failed: ${r.status}`);
+  }
+  return r.json();
+}

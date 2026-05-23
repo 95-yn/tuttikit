@@ -3,6 +3,7 @@ import { calculatorTool } from './calculator.js';
 import { fileReadTool, fileWriteTool } from './fileSystem.js';
 import { webSearchTool } from './webSearch.js';
 import { codeExecTool } from './codeExec.js';
+import { renderArtifactTool } from './artifact.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -39,6 +40,10 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
   });
   reg.register({
     ...codeExecTool,
+    allowedAgents: ['conductor', 'coder'],
+  });
+  reg.register({
+    ...renderArtifactTool,
     allowedAgents: ['conductor', 'coder'],
   });
 
