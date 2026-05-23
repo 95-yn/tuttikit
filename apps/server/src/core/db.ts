@@ -92,7 +92,7 @@ export function transaction<T>(fn: () => T): T {
  * 表结构 + schema version。
  * 加新表时：在 schema_versions 里加一条 migration，按版本号顺序跑。
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function _ensureSchema(db: DatabaseSync): void {
   // 用 user_version PRAGMA 跟踪当前 schema 版本
@@ -126,6 +126,17 @@ function _ensureSchema(db: DatabaseSync): void {
         updated_at   INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, updated_at DESC);
+    `);
+  }
+  if (cur >= 3 && cur < 4) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS shares (
+        token        TEXT PRIMARY KEY,
+        session_id   TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        expires_at   INTEGER                       -- 可空 = 永不过期
+      );
+      CREATE INDEX IF NOT EXISTS idx_shares_session ON shares(session_id);
     `);
   }
   if (cur >= 1) {
@@ -214,6 +225,15 @@ function _ensureSchema(db: DatabaseSync): void {
       updated_at   INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, updated_at DESC);
+
+    -- shares：可分享只读对话链接（v4）
+    CREATE TABLE IF NOT EXISTS shares (
+      token        TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL,
+      created_at   INTEGER NOT NULL,
+      expires_at   INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_shares_session ON shares(session_id);
   `);
 
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

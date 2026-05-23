@@ -28,6 +28,7 @@ export function IconSprite() {
       <symbol id="i-arrow-down" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></symbol>
       <symbol id="i-thumbs-up" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></symbol>
       <symbol id="i-thumbs-down" viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></symbol>
     </svg>
   );
 }
@@ -37,7 +38,7 @@ export type IconName =
   | 'i-copy' | 'i-check' | 'i-chev-right' | 'i-wrench' | 'i-bot'
   | 'i-search' | 'i-file' | 'i-calc' | 'i-mic' | 'i-mic-off'
   | 'i-download' | 'i-source' | 'i-x' | 'i-warn' | 'i-info' | 'i-menu'
-  | 'i-qr' | 'i-arrow-down' | 'i-thumbs-up' | 'i-thumbs-down';
+  | 'i-qr' | 'i-arrow-down' | 'i-thumbs-up' | 'i-thumbs-down' | 'i-share';
 
 export function Icon({
   name, size,

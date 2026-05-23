@@ -5,6 +5,8 @@ import { webSearchTool } from './webSearch.js';
 import { codeExecTool } from './codeExec.js';
 import { renderArtifactTool } from './artifact.js';
 import { gitStatusTool, gitDiffTool } from './git.js';
+import { fetchAndSummarizeTool } from './fetchUrl.js';
+import { debateTool } from './debate.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -54,6 +56,14 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
   reg.register({
     ...gitDiffTool,
     allowedAgents: ['conductor', 'coder', 'reviewer'],
+  });
+  reg.register({
+    ...fetchAndSummarizeTool,
+    allowedAgents: ['conductor', 'researcher', 'coder'],
+  });
+  reg.register({
+    ...debateTool,
+    allowedAgents: ['conductor'],
   });
 
   const common = { llm, toolRegistry: reg, longTermMemory, bus };

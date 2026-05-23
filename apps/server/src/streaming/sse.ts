@@ -41,6 +41,8 @@ const EVENTS = [
   'memory:auto-saved',
   // Artifact 渲染（Claude Artifacts 风格）
   'artifact:rendered',
+  // Token / 成本预估
+  'cost:estimated',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

@@ -1126,6 +1126,15 @@ body {
   transition: background .12s ease, color .12s ease;
 }
 .btn-mic:hover { background: var(--bg-elev-3); color: var(--text); }
+.btn-mic:disabled,
+.btn-mic.disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--muted);
+}
+.btn-mic:disabled:hover,
+.btn-mic.disabled:hover { background: transparent; color: var(--muted); }
 .btn-mic.listening {
   background: rgba(239,68,68,.14);
   color: var(--error);
@@ -2615,4 +2624,68 @@ body {
   .session-title { font-size: 13px; }
   .empty-state h2 { font-size: 16px; }
   .empty-state p { font-size: 13px; }
+}
+
+/* ───── Shared conversation read-only page ───── */
+.share-page {
+  min-height: 100vh;
+  background: var(--bg, #0a0a0c);
+  color: var(--text, #ECEDEE);
+  display: flex;
+  flex-direction: column;
+}
+.share-banner {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-elev-1, #131316);
+  border-bottom: 1px solid var(--border, #32343d);
+  font-size: var(--t-sm, 13px);
+  color: var(--text-dim, #9ba0a8);
+}
+.share-banner .link {
+  color: var(--accent, #7C9CFF);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color .12s;
+}
+.share-banner .link:hover { border-bottom-color: var(--accent, #7C9CFF); }
+
+.share-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--sp-5, 24px) var(--sp-4, 16px);
+  flex: 1;
+}
+.share-title {
+  font-size: var(--t-xl, 22px);
+  font-weight: 700;
+  margin: 0 0 var(--sp-2, 8px) 0;
+  color: var(--text, #ECEDEE);
+}
+.share-meta {
+  font-size: var(--t-sm, 13px);
+  color: var(--text-dim, #9ba0a8);
+  margin-bottom: var(--sp-5, 24px);
+  border-bottom: 1px solid var(--border, #32343d);
+  padding-bottom: var(--sp-3, 12px);
+}
+.share-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3, 12px);
+}
+.share-status {
+  text-align: center;
+  padding: var(--sp-6, 32px);
+  color: var(--text-dim, #9ba0a8);
+}
+.share-status.err { color: var(--error, #ef4444); }
+
+@media (max-width: 720px) {
+  .share-container { padding: var(--sp-3, 12px); }
+  .share-banner { flex-direction: column; gap: var(--sp-1, 4px); text-align: center; }
 }

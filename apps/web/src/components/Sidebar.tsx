@@ -12,6 +12,7 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (s: SessionSummary) => void;
+  onShare?: (s: SessionSummary) => void;
 }
 
 function bucketOf(updatedAt: string | undefined): string {
@@ -37,7 +38,7 @@ function bucketOf(updatedAt: string | undefined): string {
 const BUCKET_ORDER = ['今天', '昨天', '本周', '本月', '更早'];
 
 export function Sidebar({
-  sessions, currentId, open, onClose, onSelect, onNew, onRename, onDelete,
+  sessions, currentId, open, onClose, onSelect, onNew, onRename, onDelete, onShare,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -167,6 +168,16 @@ export function Sidebar({
                     <span className="session-title-text" title={s.title}>{s.title}</span>
                   )}
                   <span className="session-actions">
+                    {onShare && (
+                      <button
+                        type="button"
+                        className="session-action-btn"
+                        title="创建分享链接"
+                        onClick={(e) => { e.stopPropagation(); onShare(s); }}
+                      >
+                        <Icon name="i-share" size="sm" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="session-action-btn"

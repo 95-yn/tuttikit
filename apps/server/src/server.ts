@@ -11,6 +11,7 @@ import { migrateJSONToSQLite } from './core/migration.js';
 import { closeDB, getDB } from './core/db.js';
 import { saveFeedback, getFeedbackForSession, feedbackStats } from './core/feedback.js';
 import { getArtifact, listArtifactsForSession, saveArtifact } from './core/artifact.js';
+import { createShare, getSharedSessionAsync, listSharesForSession, deleteShare } from './core/share.js';
 import {
   installApprovalHook, resolveApproval, listPending,
   cancelAllForSession, clearStaleApprovalsOnBoot,
@@ -264,6 +265,37 @@ app.get('/artifacts/:id', (req, res) => {
   const a = getArtifact(req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
   res.json(a);
+});
+
+// ── Conversation share（C）──
+app.post('/sessions/:id/share', express.json(), async (req, res) => {
+  const sess = await sessionManager.get(req.params.id);
+  if (!sess) return res.status(404).json({ error: 'session not found' });
+  const ttl = typeof (req.body as { ttlMs?: number })?.ttlMs === 'number' ? (req.body as { ttlMs: number }).ttlMs : undefined;
+  const rec = createShare(req.params.id, ttl);
+  res.json(rec);
+});
+app.get('/sessions/:id/shares', (req, res) => {
+  res.json({ items: listSharesForSession(req.params.id) });
+});
+app.delete('/shares/:token', (req, res) => {
+  const ok = deleteShare(req.params.token);
+  res.json({ ok });
+});
+// 公开只读 endpoint：拿 token 直接看 session
+app.get('/share/:token', async (req, res) => {
+  const r = await getSharedSessionAsync(req.params.token);
+  if (!r) return res.status(404).json({ error: 'not found or expired' });
+  // 只读 + 去除可能敏感的 meta（保留消息内容 + role + 附件元数据）
+  res.json({
+    title: r.session.title,
+    createdAt: r.session.createdAt,
+    sharedAt: r.share.createdAt,
+    messages: r.session.messages.map((m) => ({
+      role: m.role, content: m.content, attachments: m.attachments,
+      toolName: m.toolName,
+    })),
+  });
 });
 // 用户直接编辑保存：body { html, title?, kind? }
 app.put('/artifacts/:id', express.json({ limit: '1mb' }), (req, res) => {

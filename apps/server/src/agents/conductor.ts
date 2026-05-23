@@ -11,6 +11,7 @@ import { compactIfNeeded, persistCompact, recallRelevant, formatRecalled } from 
 import { CitationCollector, CITATION_INSTRUCTION } from '../core/citation.js';
 import { extractAndRemember } from '../memory/autoExtract.js';
 import { longTermMemory } from '../memory/longTerm.js';
+import { estimateTaskCost, compareActualVsEstimate } from '../llm/costEstimator.js';
 import { contextWindowOf } from '../llm/contextWindow.js';
 import { redactSecrets } from '../core/redact.js';
 import type { Logger } from 'pino';
@@ -109,6 +110,11 @@ export class ConductorAgent {
     }
 
     drainer.enter();
+
+    // ────── Token / 成本预估（E）──────
+    // turn 开始前给前端一个粗略估值，让用户对"这一次大概多少钱"有预期
+    const costEstimate = estimateTaskCost(userMessage, this.llm.name);
+    this.bus?.emit('cost:estimated', { sessionId, ...costEstimate });
 
     // ────── 上下文管理（C+D） ──────
     // C: 估算当前 session 是否要压缩，超阈值就把老消息批量摘要 + 全文进 archive
@@ -246,6 +252,16 @@ export class ConductorAgent {
       this.logger.info(
         { sessionId, steps: stepCounter.value, usage: totalUsage, turnUSD: budget.turnUSD, sessionUSD: budget.sessionUSD },
         'turn done',
+      );
+      // 成本预估校准（E）：对比 actual vs estimate，超 50% 偏差 warn 便于调 PROFILE 系数
+      compareActualVsEstimate(
+        costEstimate,
+        {
+          tokens: (totalUsage.inputTokens ?? 0) + (totalUsage.outputTokens ?? 0),
+          usd: budget.turnUSD,
+          steps: stepCounter.value,
+        },
+        { sessionId, provider: this.llm.name },
       );
       // 自动 long-term memory 提取（W2.2 Y3）：fire-and-forget，不阻塞响应
       if (process.env.MEMORY_AUTO_EXTRACT === 'true') {

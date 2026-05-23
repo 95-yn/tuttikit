@@ -187,3 +187,59 @@ export async function updateArtifact(
   }
   return r.json();
 }
+
+// ───── Conversation Share（只读分享链接）─────
+export interface ShareRecord {
+  token: string;
+  sessionId: string;
+  createdAt: number;
+  expiresAt?: number;
+}
+
+export interface SharedViewMessage {
+  role: 'user' | 'assistant' | 'tool';
+  content?: string;
+  attachments?: Attachment[];
+  toolName?: string;
+}
+
+export interface SharedView {
+  title: string;
+  createdAt: string;
+  sharedAt: number;
+  messages: SharedViewMessage[];
+}
+
+export async function createShare(sessionId: string, ttlMs?: number): Promise<ShareRecord> {
+  const r = await fetch(`${API}/sessions/${sessionId}/share`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ttlMs ? { ttlMs } : {}),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `createShare failed: ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function listShares(sessionId: string): Promise<{ items: ShareRecord[] }> {
+  const r = await fetch(`${API}/sessions/${sessionId}/shares`);
+  if (!r.ok) return { items: [] };
+  return r.json();
+}
+
+export async function deleteShare(token: string): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API}/shares/${token}`, { method: 'DELETE' });
+  if (!r.ok) return { ok: false };
+  return r.json();
+}
+
+export async function getSharedView(token: string): Promise<SharedView> {
+  const r = await fetch(`${API}/share/${token}`);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(err.error || `getSharedView failed: ${r.status}`);
+  }
+  return r.json();
+}

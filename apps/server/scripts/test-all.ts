@@ -37,6 +37,7 @@ const TESTS = [
   'test-sqlite-migration.ts',
   'test-code-exec.ts',
   'test-artifact.ts',
+  'test-ade-tools.ts',
 ];
 
 // 解析参数

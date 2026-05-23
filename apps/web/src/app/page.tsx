@@ -15,6 +15,7 @@ import { useChat } from '@/hooks/useChat';
 import { useGlobalSync } from '@/hooks/useGlobalSync';
 import { useAttachments } from '@/hooks/useAttachments';
 import { useKeyboardAware } from '@/hooks/useKeyboardAware';
+import { useVoice, stripMarkdownForSpeech } from '@/hooks/useVoice';
 import { exportSessionToMarkdown, downloadMarkdown, copyToClipboard } from '@/lib/exportSession';
 import * as api from '@/lib/api';
 import type { SessionSummary, Session } from '@/lib/types';
@@ -35,8 +36,27 @@ export default function ChatPage() {
 
   const chat = useChat(currentId);
   const attach = useAttachments();
+  const voice = useVoice();
   const messagesRef = useRef<HTMLDivElement | null>(null);
   useKeyboardAware();
+
+  // 自动朗读：监听 busy 从 true→false（即一轮 turn:done），读最后一条 assistant 内容
+  const prevBusyRef = useRef<boolean>(false);
+  useEffect(() => {
+    const prev = prevBusyRef.current;
+    prevBusyRef.current = chat.busy;
+    if (!(prev && !chat.busy)) return;            // 只在下降沿触发
+    if (!voice.autoSpeak) return;
+    // 找最后一条非流式 assistant
+    let last: string | null = null;
+    for (let i = chat.bubbles.length - 1; i >= 0; i--) {
+      const b = chat.bubbles[i];
+      if (b.role === 'assistant' && !b.streaming) { last = b.content || ''; break; }
+    }
+    if (!last) return;
+    const clean = stripMarkdownForSpeech(last);
+    if (clean) voice.speak(clean);
+  }, [chat.busy, chat.bubbles, voice]);
 
   // ───── Boot ─────
   useEffect(() => {
@@ -177,6 +197,24 @@ export default function ChatPage() {
     showToast(ok ? '会话已复制到剪贴板' : '复制失败', { type: ok ? 'success' : 'error', duration: 2400 });
   }, [currentId]);
 
+  // 创建分享链接：调后端 → 拼完整 URL → 复制到剪贴板
+  const shareSession = useCallback(async (sessionId: string) => {
+    try {
+      const rec = await api.createShare(sessionId);
+      const url = `${window.location.origin}/share/${rec.token}`;
+      const ok = await copyToClipboard(url);
+      showToast(ok ? `已复制分享链接：${url}` : `分享链接已创建：${url}`, {
+        type: 'success', duration: 4000,
+      });
+    } catch (err) {
+      showToast(`创建分享链接失败：${(err as Error).message}`, { type: 'error', duration: 4000 });
+    }
+  }, []);
+  const shareCurrent = useCallback(() => {
+    if (!currentId) { showToast('先选一个会话', { type: 'warn' }); return; }
+    void shareSession(currentId);
+  }, [currentId, shareSession]);
+
   // 重生：找到最后一条 user 消息 → 截断（含 user）→ 重发同样内容
   const regenerate = useCallback(async () => {
     if (!currentId || chat.busy) return;
@@ -253,6 +291,7 @@ export default function ChatPage() {
           onNew={newSession}
           onRename={onRename}
           onDelete={onDelete}
+          onShare={(s) => shareSession(s.id)}
         />
 
         <main id="main">
@@ -340,6 +379,16 @@ export default function ChatPage() {
         effectiveProvider={effectiveProvider}
         onExportCurrent={currentId ? exportCurrent : undefined}
         onCopyCurrent={currentId ? copyCurrent : undefined}
+        onShareCurrent={currentId ? shareCurrent : undefined}
+        autoSpeak={voice.autoSpeak}
+        onToggleAutoSpeak={() => {
+          const next = !voice.autoSpeak;
+          voice.setAutoSpeak(next);
+          if (!next) voice.stopSpeaking();    // 关掉时把正在朗读的也停了
+          showToast(next ? '🔊 已开启自动朗读 LLM 回答' : '🔇 已关闭自动朗读', {
+            type: 'success', duration: 2400,
+          });
+        }}
       />
       <DebugPanel />
       <ToastModalHost />

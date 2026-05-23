@@ -14,12 +14,19 @@ process.env.EMBEDDING_PROVIDER = 'mock';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { SessionManager } from '../src/core/session.js';
-import {
+
+// 必须在 import 任何 TuttiKit 模块前 setDBPath，否则会污染 ./data/tuttikit.db
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compact-test-db-'));
+const { setDBPath, closeDB } = await import('../src/core/db.js');
+setDBPath(path.join(tmpDir, 'test.db'));
+const { SessionManager } = await import('../src/core/session.js');
+const {
   estimateTokens, compactIfNeeded, persistCompact, recallRelevant, getArchive,
   gcArchive,
-} from '../src/core/sessionCompact.js';
-import type { LLMLike, LLMCallArgs, LLMResponse } from '../src/types.js';
+} = await import('../src/core/sessionCompact.js');
+type LLMLike = import('../src/types.js').LLMLike;
+type LLMCallArgs = import('../src/types.js').LLMCallArgs;
+type LLMResponse = import('../src/types.js').LLMResponse;
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) { console.error(`✗ ${msg}`); process.exit(1); }
@@ -42,9 +49,7 @@ const mockLLM: LLMLike = {
   assert(t1 < 10, '短消息估算合理（< 10）');
 }
 
-// 准备一个临时 session manager
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'compact-test-'));
-const sm = new SessionManager({ dir: tmpDir });
+const sm = new SessionManager();    // db path 已通过 setDBPath 切到 tmp
 
 // ───── B. 未超阈值 → 不压 ─────
 {
@@ -170,4 +175,6 @@ const sm = new SessionManager({ dir: tmpDir });
   assert(res3.evicted === 0, '[F.3] keepCount > summary 数 → 不 evict');
 }
 
+closeDB();
+fs.rmSync(tmpDir, { recursive: true, force: true });
 console.log('\n全部通过 ✅');

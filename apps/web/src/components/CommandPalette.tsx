@@ -23,6 +23,9 @@ interface Props {
   effectiveProvider: string;
   onExportCurrent?: () => void;
   onCopyCurrent?: () => void;
+  onShareCurrent?: () => void;
+  autoSpeak?: boolean;
+  onToggleAutoSpeak?: () => void;
 }
 
 const PROVIDERS = [
@@ -41,7 +44,8 @@ const PROVIDERS = [
 export function CommandPalette({
   open, onClose, sessions, currentId, onSelectSession,
   onNewSession, onDeleteSession, onSetProvider, effectiveProvider,
-  onExportCurrent, onCopyCurrent,
+  onExportCurrent, onCopyCurrent, onShareCurrent,
+  autoSpeak, onToggleAutoSpeak,
 }: Props) {
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
@@ -66,6 +70,19 @@ export function CommandPalette({
       keywords: 'copy all clipboard',
       action: () => onCopyCurrent(),
     });
+    if (onShareCurrent) ops.push({
+      id: 'share', label: '创建分享链接（只读）', group: '操作',
+      keywords: 'share link readonly 分享',
+      action: () => onShareCurrent(),
+    });
+    if (onToggleAutoSpeak) ops.push({
+      id: 'voice-autospeak',
+      label: `🔊 自动朗读 LLM 回答：${autoSpeak ? '开' : '关'}`,
+      group: '操作',
+      hint: autoSpeak ? '点击关闭' : '点击开启',
+      keywords: 'voice speak tts autospeak 朗读 语音',
+      action: () => onToggleAutoSpeak(),
+    });
     const provOps: Command[] = PROVIDERS.map((p) => ({
       id: `prov:${p.id}`,
       label: `切到 ${p.label}`,
@@ -82,7 +99,7 @@ export function CommandPalette({
       action: () => onSelectSession(s.id),
     }));
     return [...ops, ...provOps, ...sessOps];
-  }, [sessions, currentId, effectiveProvider, onSelectSession, onNewSession, onSetProvider, onExportCurrent, onCopyCurrent]);
+  }, [sessions, currentId, effectiveProvider, onSelectSession, onNewSession, onSetProvider, onExportCurrent, onCopyCurrent, onShareCurrent, autoSpeak, onToggleAutoSpeak]);
 
   // 模糊匹配：lowercase 子串
   const filtered = useMemo(() => {

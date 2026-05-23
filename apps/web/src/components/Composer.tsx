@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './IconSprite';
 import { AttachmentList } from './AttachmentList';
 import { SlashMenu, buildSlashItems, type SlashItem } from './SlashMenu';
-import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { useVoice } from '@/hooks/useVoice';
 import type { Attachment } from '@/lib/types';
 
 interface Props {
@@ -32,7 +32,39 @@ export function Composer({
   const [dragOver, setDragOver] = useState(false);
   // 用户拖拽手柄调整 textarea 高度 —— 拖完写到 state 持久这次会话
   const [manualHeight, setManualHeight] = useState<number | null>(null);
-  const voice = useVoiceInput({ value, setValue: onChange });
+
+  // ───── Voice：用 useVoice 简版 hook。把 final 段拼到 input，interim 段独立显示 ─────
+  const voice = useVoice();
+  const [voiceInterim, setVoiceInterim] = useState('');
+  // 用 ref 避免每次 value 变化都重建 startListening 闭包
+  const valueRef = useRef(value);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  const toggleVoice = useCallback(() => {
+    if (voice.listening) {
+      voice.stopListening();
+      setVoiceInterim('');
+      return;
+    }
+    void voice.startListening((text, isFinal) => {
+      if (isFinal) {
+        // 拼到当前 input 末尾（不直接发送，让用户 review 后再点发送）
+        const base = valueRef.current;
+        const sep = base && !/\s$/.test(base) ? ' ' : '';
+        onChangeRef.current(base + sep + text);
+        setVoiceInterim('');
+      } else {
+        setVoiceInterim(text);
+      }
+    });
+  }, [voice]);
+
+  // listening 结束（onend 触发 setListening(false)）时清掉残留 interim
+  useEffect(() => {
+    if (!voice.listening) setVoiceInterim('');
+  }, [voice.listening]);
 
   // ───── Slash 命令面板 ─────
   // value 以 '/' 开头且没有空格时才打开（用户开始打 query）；按空格/选完自动关。
@@ -267,17 +299,21 @@ export function Composer({
             }
           }}
         />
-        {voice.supported && (
-          <button
-            type="button"
-            className={'btn-mic' + (voice.listening ? ' listening' : '')}
-            onClick={voice.toggle}
-            title={voice.listening ? '停止录音' : '语音输入'}
-            aria-label={voice.listening ? '停止录音' : '语音输入'}
-          >
-            <Icon name={voice.listening ? 'i-mic-off' : 'i-mic'} size="sm" />
-          </button>
-        )}
+        <button
+          type="button"
+          className={'btn-mic'
+            + (voice.listening ? ' listening' : '')
+            + (voice.supported ? '' : ' disabled')}
+          onClick={voice.supported ? toggleVoice : undefined}
+          disabled={!voice.supported}
+          title={
+            !voice.supported ? '浏览器不支持语音输入'
+            : voice.listening ? '停止录音' : '语音输入'
+          }
+          aria-label={voice.listening ? '停止录音' : '语音输入'}
+        >
+          <Icon name={voice.listening ? 'i-mic-off' : 'i-mic'} size="sm" />
+        </button>
         <button
           id="send"
           className={'btn-send' + (busy ? ' stop' : '')}
@@ -289,7 +325,7 @@ export function Composer({
           <Icon name={busy ? 'i-stop' : 'i-send'} size="sm" />
         </button>
       </div>
-      {voice.interim && <div className="voice-interim">… {voice.interim}</div>}
+      {voiceInterim && <div className="voice-interim">正在听: {voiceInterim}…</div>}
       <div className="composer-hint">
         <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行 · 支持拖拽 / 粘贴图片 / PDF
       </div>
