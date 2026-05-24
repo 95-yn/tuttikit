@@ -38,6 +38,7 @@ const TESTS = [
   'test-code-exec.ts',
   'test-artifact.ts',
   'test-ade-tools.ts',
+  'test-run-command.ts',
 ];
 
 // 解析参数

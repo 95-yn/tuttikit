@@ -7,6 +7,7 @@ import { renderArtifactTool } from './artifact.js';
 import { gitStatusTool, gitDiffTool } from './git.js';
 import { fetchAndSummarizeTool } from './fetchUrl.js';
 import { debateTool } from './debate.js';
+import { runCommandTool } from './runCommand.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -64,6 +65,10 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
   reg.register({
     ...debateTool,
     allowedAgents: ['conductor'],
+  });
+  reg.register({
+    ...runCommandTool,
+    allowedAgents: ['conductor', 'coder', 'reviewer'],
   });
 
   const common = { llm, toolRegistry: reg, longTermMemory, bus };
