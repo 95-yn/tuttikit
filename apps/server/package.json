@@ -23,6 +23,7 @@
     "test:artifact": "tsx examples/test-artifact.ts",
     "test:ade-tools": "tsx examples/test-ade-tools.ts",
     "test:run-command": "tsx examples/test-run-command.ts",
+    "test:todo-failure": "tsx examples/test-todo-failure.ts",
     "test:skills": "tsx examples/test-skills.ts",
     "test:mcp": "tsx examples/test-mcp.ts",
     "test:resilience": "tsx examples/test-resilience.ts",

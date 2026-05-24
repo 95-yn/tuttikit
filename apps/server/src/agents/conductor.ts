@@ -12,6 +12,8 @@ import { CitationCollector, CITATION_INSTRUCTION } from '../core/citation.js';
 import { extractAndRemember } from '../memory/autoExtract.js';
 import { longTermMemory } from '../memory/longTerm.js';
 import { estimateTaskCost, compareActualVsEstimate } from '../llm/costEstimator.js';
+import { formatForPrompt as formatTodoForPrompt } from '../core/todoFile.js';
+import { recentFailuresForPrompt } from '../core/failureLog.js';
 import { contextWindowOf } from '../llm/contextWindow.js';
 import { redactSecrets } from '../core/redact.js';
 import type { Logger } from 'pino';
@@ -159,11 +161,27 @@ export class ConductorAgent {
     // 有 source 才加 citation instruction，避免空池子也教 LLM 引用（它会瞎标）
     const citationBlock = citations.size() > 0 ? CITATION_INSTRUCTION : '';
 
+    // ────── Manus 经验注入（#2 + #3）──────
+    // todo.md：让 LLM 自查待办（跨 turn 持久）
+    // failures.md：让 LLM 自查历史失败（跨 session 累积）
+    let manusBlock = '';
+    try {
+      const [todoText, failureText] = await Promise.all([
+        formatTodoForPrompt(sessionId),
+        recentFailuresForPrompt(userMessage, 5),    // 用当前 query 做 keyword filter
+      ]);
+      if (todoText || failureText) {
+        manusBlock = '\n\n' + [todoText, failureText].filter(Boolean).join('\n\n');
+      }
+    } catch (err) {
+      this.logger.warn({ err: (err as Error).message }, '[manus inject] 失败，跳过');
+    }
+
     // Plan-and-Execute V1：先调 planner 拿 steps，把计划渲染进 system，让 ReAct 按计划走。
     // 启发式（shouldPlan）过滤短任务，避免每个 "你好" 都烧一次 planner。
     let plan: Plan | null = null;
     // 注意：recalledBlock 拼在 system prompt **尾部**，前缀部分保持稳定让 Anthropic prompt cache 命中（Manus / Claude Code 经验）
-    let augmentedSystem = this.systemPrompt + recalledBlock + citationBlock;
+    let augmentedSystem = this.systemPrompt + recalledBlock + citationBlock + manusBlock;
     if (config.agent.planAndExecute && shouldPlan(userMessage)) {
       const planSpan = tracer.startSpan(trace, 'llm', 'conductor.plan', { parentId: span.spanId });
       try {
@@ -195,7 +213,7 @@ export class ConductorAgent {
             runReactSteps: (a) => this._runReactSteps(a),
           },
           {
-            plan, sessionId, augmentedSystem: this.systemPrompt + recalledBlock + citationBlock,   // V2 不注入 plan 进 system
+            plan, sessionId, augmentedSystem: this.systemPrompt + recalledBlock + citationBlock + manusBlock,   // V2 不注入 plan 进 system
             tools, span, trace, tracer, stream,
             totalUsage, stepCounter,
             userMessage,

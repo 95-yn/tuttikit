@@ -8,6 +8,8 @@ import { gitStatusTool, gitDiffTool } from './git.js';
 import { fetchAndSummarizeTool } from './fetchUrl.js';
 import { debateTool } from './debate.js';
 import { runCommandTool } from './runCommand.js';
+import { todoAddTool, todoDoneTool, todoFailTool, todoStartTool, todoListTool } from './todo.js';
+import { failureLogTool, failureSearchTool } from './failure.js';
 import { makeDelegateTool } from './delegate.js';
 import { ResearcherAgent, CoderAgent, ReviewerAgent } from '../agents/index.js';
 import { findSkillsTool, invokeSkillTool } from '../skills/index.js';
@@ -70,6 +72,13 @@ export function buildToolRegistryWithSubAgents({ llm, longTermMemory, bus }: Too
     ...runCommandTool,
     allowedAgents: ['conductor', 'coder', 'reviewer'],
   });
+  // todo.md tools (Manus 经验：file-system as external memory)
+  for (const t of [todoAddTool, todoDoneTool, todoFailTool, todoStartTool, todoListTool]) {
+    reg.register({ ...t, allowedAgents: ['conductor', 'coder'] });
+  }
+  // failures.md tools (Manus + Reflexion 强化)
+  reg.register({ ...failureLogTool, allowedAgents: ['conductor', 'coder', 'reviewer'] });
+  reg.register({ ...failureSearchTool, allowedAgents: ['conductor', 'coder', 'reviewer'] });
 
   const common = { llm, toolRegistry: reg, longTermMemory, bus };
   const researcher = new ResearcherAgent(common);

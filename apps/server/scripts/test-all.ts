@@ -39,6 +39,7 @@ const TESTS = [
   'test-artifact.ts',
   'test-ade-tools.ts',
   'test-run-command.ts',
+  'test-todo-failure.ts',
 ];
 
 // 解析参数
