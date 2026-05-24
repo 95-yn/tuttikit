@@ -8,6 +8,15 @@ import { z } from 'zod';
 import type { ToolSpec, ToolCtx } from '../types.js';
 import { addItems, setStatus, listAll, type TodoItem } from '../core/todoFile.js';
 
+/** 每次 mutate 后 emit SSE 让前端立即重渲染 todo 面板 */
+async function emitTodoUpdate(ctx: ToolCtx): Promise<void> {
+  const sessionId = ctx.sessionId ?? '_default';
+  try {
+    const items = await listAll(sessionId);
+    ctx.bus?.emit('todo:updated', { sessionId, items });
+  } catch {/* ignore — emit 失败不该挂 tool */}
+}
+
 const AddInput = z.object({
   items: z.array(z.string().min(1).max(200)).min(1).max(20).describe('要加的 todo 项；每项 ≤ 200 字'),
 });
@@ -23,6 +32,7 @@ export const todoAddTool: ToolSpec<z.infer<typeof AddInput>, { added: TodoItem[]
   allowedAgents: ['conductor', 'coder'],
   async handler({ items }, ctx: ToolCtx = {}) {
     const added = await addItems(ctx.sessionId ?? '_default', items);
+    await emitTodoUpdate(ctx);
     return { added };
   },
 };
@@ -47,6 +57,7 @@ export const todoDoneTool: ToolSpec<z.infer<typeof StatusInput>, { item: TodoIte
   allowedAgents: ['conductor', 'coder'],
   async handler({ id, note }, ctx: ToolCtx = {}) {
     const item = await setStatus(ctx.sessionId ?? '_default', id, 'done', note);
+    await emitTodoUpdate(ctx);
     return { item };
   },
 };
@@ -66,6 +77,7 @@ export const todoFailTool: ToolSpec<z.infer<typeof StatusInput>, { item: TodoIte
   allowedAgents: ['conductor', 'coder'],
   async handler({ id, note }, ctx: ToolCtx = {}) {
     const item = await setStatus(ctx.sessionId ?? '_default', id, 'failed', note);
+    await emitTodoUpdate(ctx);
     return { item };
   },
 };
@@ -79,6 +91,7 @@ export const todoStartTool: ToolSpec<z.infer<typeof InProgressInput>, { item: To
   allowedAgents: ['conductor', 'coder'],
   async handler({ id }, ctx: ToolCtx = {}) {
     const item = await setStatus(ctx.sessionId ?? '_default', id, 'in_progress');
+    await emitTodoUpdate(ctx);
     return { item };
   },
 };

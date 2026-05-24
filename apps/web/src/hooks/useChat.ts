@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '@/lib/api';
-import type { Artifact } from '@/lib/api';
+import type { Artifact, TodoItem } from '@/lib/api';
 import type { Attachment, Session } from '@/lib/types';
 import type { BubbleData } from '@/components/MessageBubble';
 import type { ToolEntry } from '@/components/ToolBlock';
@@ -64,6 +64,8 @@ export interface UseChatState {
   answerPermission: (allow: boolean) => Promise<void>;
   /** Claude Artifacts 风格的 LLM 渲染 HTML（按 updatedAt desc 排好序，同 id 重复 render 自动替换） */
   artifacts: Artifact[];
+  /** LLM 自维护的 Agent Todo 列表（后端 SSE 'todo:updated' 推完整 items） */
+  todos: TodoItem[];
 }
 
 let _bubbleSeq = 0;
@@ -81,6 +83,8 @@ export function useChat(sessionId: string | null): UseChatState {
   // artifacts 用 Map<id, Artifact> 内部存（O(1) 同 id 覆盖更新），
   // 暴露给页面前 useMemo 转成按 updatedAt desc 排序的 array。
   const [artifactMap, setArtifactMap] = useState<Map<string, Artifact>>(() => new Map());
+  // Agent todo：后端 SSE 推送的是完整 items 列表，直接整体替换即可
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const artifacts = useMemo(
     () => Array.from(artifactMap.values()).sort((a, b) => b.updatedAt - a.updatedAt),
     [artifactMap],
@@ -165,6 +169,7 @@ export function useChat(sessionId: string | null): UseChatState {
     });
     setNotices([]);
     setArtifactMap(new Map());
+    setTodos([]);
   }, [sessionId, stop]);
 
   // 组件卸载时取消挂起的 rAF
@@ -231,6 +236,11 @@ export function useChat(sessionId: string | null): UseChatState {
       const next = new Map<string, Artifact>();
       for (const a of items) next.set(a.id, a);
       setArtifactMap(next);
+    } catch {/* ignore */}
+    // 拉回这个 session 的 agent todo（reconnect / 切回旧 session 都要还原 checklist）
+    try {
+      const { items } = await api.getTodos(session.id);
+      setTodos(items);
     } catch {/* ignore */}
     // reconnect 时同步当前 session 是否有 pending 审批（之前已发出但前端断连了）
     try {
@@ -407,6 +417,18 @@ export function useChat(sessionId: string | null): UseChatState {
           });
           return next;
         });
+      } catch {/* ignore */}
+    });
+
+    es.addEventListener('todo:updated', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          sessionId: string; items: TodoItem[];
+        };
+        // 防御性过滤：避免迟到的事件覆盖到刚切过去的新 session
+        if (!sessionId || data.sessionId !== sessionId) return;
+        // 后端发的是完整 items 列表，直接整体替换
+        setTodos(data.items || []);
       } catch {/* ignore */}
     });
 
@@ -646,5 +668,6 @@ export function useChat(sessionId: string | null): UseChatState {
     send, stop, loadFromSession, reset,
     pendingApproval, answerPermission,
     artifacts,
+    todos,
   };
 }

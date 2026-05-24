@@ -146,6 +146,20 @@ export async function listSessionFeedback(sessionId: string): Promise<{
   return r.json();
 }
 
+// ───── Agent Todo（LLM 自己维护的执行 checklist）─────
+export interface TodoItem {
+  id: string;
+  text: string;
+  status: 'pending' | 'in_progress' | 'done' | 'failed';
+  note?: string;
+}
+
+export async function getTodos(sessionId: string): Promise<{ items: TodoItem[] }> {
+  const r = await fetch(`${API}/sessions/${sessionId}/todo`);
+  if (!r.ok) return { items: [] };
+  return r.json();
+}
+
 // ───── Artifacts（Claude Artifacts 风格的沙箱 HTML 渲染）─────
 export interface Artifact {
   id: string;

@@ -12,6 +12,7 @@ import { closeDB, getDB } from './core/db.js';
 import { saveFeedback, getFeedbackForSession, feedbackStats } from './core/feedback.js';
 import { getArtifact, listArtifactsForSession, saveArtifact } from './core/artifact.js';
 import { createShare, getSharedSessionAsync, listSharesForSession, deleteShare } from './core/share.js';
+import { listAll as listTodo } from './core/todoFile.js';
 import {
   installApprovalHook, resolveApproval, listPending,
   cancelAllForSession, clearStaleApprovalsOnBoot,
@@ -255,6 +256,12 @@ app.post('/sessions/:id/messages/:messageId/feedback', express.json(), (req, res
 });
 app.get('/sessions/:id/feedback', (req, res) => {
   res.json({ items: getFeedbackForSession(req.params.id), stats: feedbackStats(req.params.id) });
+});
+
+// ── Todo（持久 plan checklist）──
+app.get('/sessions/:id/todo', async (req, res) => {
+  const items = await listTodo(req.params.id);
+  res.json({ items });
 });
 
 // ── Artifacts（Claude Artifacts 风格的 LLM 渲染 HTML）──

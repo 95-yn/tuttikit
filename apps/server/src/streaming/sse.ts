@@ -43,6 +43,8 @@ const EVENTS = [
   'artifact:rendered',
   // Token / 成本预估
   'cost:estimated',
+  // Todo.md 变化（agent 维护的 plan checklist）
+  'todo:updated',
 ] as const;
 
 type EventName = (typeof EVENTS)[number];

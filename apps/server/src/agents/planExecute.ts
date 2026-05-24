@@ -20,6 +20,7 @@ import type { Trace, Tracer, Span } from '../observability/tracer.js';
 import { revisePlan, type Plan } from './planner.js';
 import { requestApproval } from '../core/approval.js';
 import { reflect } from './reflexion.js';
+import { logFailure } from '../core/failureLog.js';
 
 // W1.4 R4 Task-level checkpoint：每 N 个 step 暂停问用户「继续 / 中止」。
 // 0 = 不做 checkpoint（默认；保留旧行为）
@@ -178,6 +179,13 @@ export async function planExecuteSteps(deps: PlanExecuteDeps, args: PlanExecuteA
         deps.bus?.emit('reflexion:noted', { sessionId: args.sessionId, stepId: step.id, reflection });
         deps.logger.info({ stepId: step.id, reflection: reflection.slice(0, 100) }, '[reflexion] 写了反思');
       }
+      // 自动落 global failures.md（跨 session 累积，下次类似任务 LLM 自查）
+      void logFailure({
+        sessionId: args.sessionId,
+        task: step.description,
+        reason: stepError || stepContent.slice(0, 300),
+        fix: reflection ?? undefined,
+      }).catch((err) => deps.logger.warn({ err: (err as Error).message }, '[plan] auto logFailure 失败'));
       const replanSpan = args.tracer.startSpan(args.trace, 'llm', 'conductor.replan', { parentId: args.span.spanId });
       try {
         const revisedPlan = await revisePlan(deps.llm, {

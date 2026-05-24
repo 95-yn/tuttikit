@@ -2689,3 +2689,166 @@ body {
   .share-container { padding: var(--sp-3, 12px); }
   .share-banner { flex-direction: column; gap: var(--sp-1, 4px); text-align: center; }
 }
+
+/* ════════════════════════════════════════════════════
+   Agent Todo Panel —— 右下角浮窗，实时跟随 LLM checklist
+   ════════════════════════════════════════════════════ */
+.todo-panel {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  width: 280px;
+  max-height: 240px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  animation: todo-panel-in .18s ease;
+}
+@keyframes todo-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.todo-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-1);
+}
+.todo-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: .02em;
+}
+.todo-panel-collapse-btn {
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.todo-panel-collapse-btn:hover {
+  background: var(--bg-elev-3);
+  color: var(--text);
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  line-height: 1.35;
+}
+.todo-icon {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  flex-shrink: 0;
+  display: inline-block;
+  min-width: 22px;
+  text-align: left;
+}
+.todo-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.todo-text {
+  word-break: break-word;
+}
+.todo-note {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.todo-item-pending .todo-icon { color: var(--muted); }
+.todo-item-pending .todo-text { color: var(--text-dim); }
+
+.todo-item-running .todo-icon { color: var(--accent); }
+.todo-item-running .todo-text { color: var(--text); font-weight: 500; }
+.todo-item-running { background: var(--accent-soft); }
+
+.todo-item-done .todo-icon { color: var(--ok); }
+.todo-item-done .todo-text { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.todo-item-failed .todo-icon { color: var(--error); }
+.todo-item-failed .todo-text { color: var(--error); }
+
+/* in_progress 转圈：纯 CSS keyframes，不引第三方 icon */
+.todo-spinner {
+  display: inline-block;
+  animation: todo-spin 1.1s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes todo-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* 折叠态：小 chip 按钮 */
+.todo-panel-collapsed {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background .12s ease, color .12s ease, transform .15s ease;
+  animation: todo-panel-in .18s ease;
+}
+.todo-panel-collapsed:hover {
+  background: var(--bg-elev-3);
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.todo-spinner-mini {
+  display: inline-block;
+  color: var(--accent);
+  animation: todo-spin 1.1s linear infinite;
+}
+
+@media (max-width: 720px) {
+  .todo-panel { width: calc(100vw - 24px); right: 12px; bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .todo-panel-collapsed { right: 12px; bottom: calc(96px + env(safe-area-inset-bottom)); }
+}

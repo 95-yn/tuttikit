@@ -126,6 +126,31 @@ _resetForTest(SID);
   assert(ids.size === 20, '[H] 20 个 id 互不重复');
 }
 
+// ───── I. todo tool 通过 ToolRegistry emit SSE ─────
+{
+  const { ToolRegistry } = await import('../src/tools/registry.js');
+  const { todoAddTool, todoDoneTool } = await import('../src/tools/todo.js');
+  const { MessageBus } = await import('../src/core/messageBus.js');
+  const registry = new ToolRegistry();
+  registry.register({ ...todoAddTool, allowedAgents: ['conductor'] });
+  registry.register({ ...todoDoneTool, allowedAgents: ['conductor'] });
+
+  const bus = new MessageBus();
+  let emitted: { sessionId: string; items: unknown[] } | null = null;
+  bus.on('todo:updated', (p) => { emitted = p as typeof emitted; });
+
+  const r = await registry.invoke('todo_add', { items: ['新项 1', '新项 2'] },
+    { agent: 'conductor', sessionId: 's-sse', bus }) as { added: Array<{ id: string }> };
+  assert(emitted !== null, '[I] todo_add emit todo:updated');
+  assert(emitted!.sessionId === 's-sse', '[I] sessionId 正确');
+  assert(emitted!.items.length === 2, `[I] 发出 2 个 item（实际 ${emitted!.items.length}）`);
+
+  emitted = null;
+  await registry.invoke('todo_done', { id: r.added[0].id, note: '完事' },
+    { agent: 'conductor', sessionId: 's-sse', bus });
+  assert(emitted !== null, '[I] todo_done 也 emit');
+}
+
 process.chdir(origCwd);
 fs.rmSync(tmpCwd, { recursive: true, force: true });
 console.log('\n全部通过 ✅');
